@@ -1,3 +1,4 @@
+
 """
 Script: IEM6.py
 Author: Esther Grossman
@@ -71,7 +72,7 @@ def list_avg(x1, x2):
 
 def dist(x1, x2):
     """Distance between two points"""
-    r = math.sqrt((x2[0] - x1[0]) ^ 2 + (x2[1] - x1[1]) ^ 2)
+    r = math.sqrt((x2[0] - x1[0]) ** 2 + (x2[1] - x1[1]) ** 2)
     return r
 
 
@@ -84,6 +85,8 @@ def greens(x1, x2):
 def find_normal(q1, q2):
     if np.round(q2[1], 3) == np.round(q1[1], 3):
         normal = np.array([0, 1])
+        if q2[0] > q1[0]:
+            normal *= -1
     else:
         m = -(q2[0] - q1[0]) / (q2[1] - q1[1])
         normal_temp = np.array([1, m])
@@ -93,7 +96,7 @@ def find_normal(q1, q2):
     return normal
 
 
-def intgreens(p, q1, q2, is_selfterm=False):
+def intgreens(p, q1, q2, is_selfterm = False):
     """Input is reference point p and the segment points to integrate Greens function over. Output is 
     integral of Green's potential at point p is the center of the self-term"""
     v = 0 if q1[1] == q2[1] else 1  # v is variable to integrate over
@@ -103,8 +106,9 @@ def intgreens(p, q1, q2, is_selfterm=False):
         / (2 * pi)
         * ln(np.lib.scimath.sqrt((p[v] - x) ** 2 + (p[w] - q1[w]) ** 2))
     )
-    if is_selfterm:  # self-term
-        # Gint = scipy.integrate.quad(Greens, q1[v], p[v])[0] + scipy.integrate.quad(Greens, p[v], q2[v])[0]
+    
+    if is_selfterm:
+        #print(p,q1,q2, is_selfterm)
         Gint = (
             -1
             / (2 * pi)
@@ -112,10 +116,8 @@ def intgreens(p, q1, q2, is_selfterm=False):
                 -(q1[v] - p[v]) * ln(abs(q1[v] - p[v]))
                 + (q2[v] - p[v]) * ln(abs(q2[v] - p[v]))
                 + q1[v]
-                - q2[v]
-            )
-        )
-    elif q1[v] == p[v]:   #same v on one side
+                - q2[v])) 
+    elif q1[v] == p[v]:
         Gint = (
             -1
             / (2 * pi)
@@ -126,7 +128,7 @@ def intgreens(p, q1, q2, is_selfterm=False):
                 + q1[v]
             )
         )
-    elif q2[v] == p[v]:  #same v on other side
+    elif q2[v] == p[v]:
         Gint = (
             -1
             / (2 * pi)
@@ -141,8 +143,8 @@ def intgreens(p, q1, q2, is_selfterm=False):
                 )
                 - q2[v]
             )
-        )
-    elif abs(q1[v] - p[v]) + abs(q2[v] - p[v]) <= abs(q2[v] - q1[v]):   #point falls between segment being integrated over but not a self term
+        ) 
+    elif (abs(q1[v] - p[v]) + abs(q2[v] - p[v]) <= abs(q2[v] - q1[v])):
         Gint = (
             -1
             / (2 * pi)
@@ -162,9 +164,9 @@ def intgreens(p, q1, q2, is_selfterm=False):
                 )
             )
         )
-    
     else:
         Gint = scipy.integrate.quad(Greens, q1[v], q2[v])[0]
+          
     return Gint
 
 
@@ -183,11 +185,6 @@ def intDgreens(p, q1, q2, is_selfterm=False):
         )
         / ((p[w] - q1[w]) ** 2 + (p[v] - x) ** 2)
     )
-    # =============================================================================
-    #     Q = np.subtract(q2,q1)
-    #     m = np.zeros(2); m[w]=1;  #positive normal vector
-    #     nw = (-1 if np.cross(Q,m) > 0 else 1)  #outer boundary normal pointing outward from walls
-    # =============================================================================
     if is_selfterm:  # self-terms solution
         DGint = (
             scipy.integrate.quad(Dgreens, q1[v], p[v])[0]
@@ -230,9 +227,9 @@ def intDgreensA(p, q1, q2, is_self):
 intgreens.counter1 = 0
 intgreens.counter2 = 0
 intgreens.counter3 = 0
-lseg = 0.1  # SPECIFIC length of each segment
 nx = 19  # SPECIFIC number of points on x (odd number)
 ny = 19  # SPECIFIC number of points on y (odd number)
+lseg = 2.0/nx  #specific length of each segment
 # ipdb.set_trace()
 
 # Discretize outer boundary
@@ -243,8 +240,9 @@ N_total = len(boundsA)
 # Set up boundary conditions for collocation
 c_Q = np.full(N_total, 1 / 2)
 p = [list_avg(bounds[i - 1], bounds[i]) for i in range(N_total)]  # collocation points
+#p.append(p.pop(0))  #make sure p lines between correct bounds
 goal_index = int(N_total / 3)
-start_index = 2
+start_index = 7
 u_Q = np.ones(N_total)  # known and unknown potential at boundary point p
 u_Q[goal_index] = 0
 gam_Q = np.zeros(N_total)
@@ -296,21 +294,37 @@ u_bound_est = []
 for i in range(N_total):
     temp = 0
     for k in range(N_total):
+        is_self = True if i == k else False
         temp += 2 * (
-            gam_Q[k] * intgreens(pA[i], bounds[k - 1], bounds[k])
-            - u_Q[k] * intDgreens(pA[i], bounds[k - 1], bounds[k])
+            gam_Q[k] * intgreens(pA[i], bounds[k - 1], bounds[k], is_self)
+            - u_Q[k] * intDgreens(pA[i], bounds[k - 1], bounds[k], is_self)
         )
     u_bound_est.append(temp)
 ax.plot(list(pA[:, 0]), list(pA[:, 1]), u_bound_est[0:N_total], color="blue")
 plt.plot(boundsA[:, 0], boundsA[:, 1], "ro")
 
-# Plot ones on the boundary
-fig = plt.figure()
-ax = Axes3D(fig)
-pA = np.array(p[0:N_total])
-ax.plot(list(pA[:, 0]), list(pA[:, 1]), np.ones(N_total), color="blue")
-plt.plot(boundsA[:, 0], boundsA[:, 1], "ro")
 
+fig = plt.figure()
+ax = fig.add_subplot(111)
+plt.plot(boundsA[:,0], boundsA[:,1], 'ro')
+plt.plot(pA[:,0], pA[:,1], 'bo')
+plt.axis('equal')
+normals1 = np.zeros((N_total,2))
+for i in range(N_total):
+     normals1[i] = find_normal(bounds[i-1], bounds[i])
+ax.quiver(pA[:,0],pA[:,1], normals1[:,0], normals1[:,1], color ='r') #U and V are the x and y components of the normal vectors
+# ax.quiver(p_start[:,0],p_start[:,1], normals2[:,0], normals2[:,1], color ='r')
+# ax.quiver(p_goal[:,0],p_goal[:,1], normals2[:,0], normals2[:,1], color ='r')
+
+# =============================================================================
+# # Plot ones on the boundary
+# fig = plt.figure()
+# ax = Axes3D(fig)
+# pA = np.array(p[0:N_total])
+# ax.plot(list(pA[:, 0]), list(pA[:, 1]), np.ones(N_total), color="blue")
+# plt.plot(boundsA[:, 0], boundsA[:, 1], "ro")
+# 
+# =============================================================================
 
 # =============================================================================
 # # Solve for points inside the domain and plot potential inside domain

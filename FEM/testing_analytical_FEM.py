@@ -2,6 +2,7 @@
 """
 Author: Esther Grossman
 Dste: 7/22/21
+
 ECE 222C Project 2 : Find Greens Function for triangular elements on a domain
 using Finite Element Methods. Phi and Greens are used interchangably in this code
 as variable names to describe the greens function at a point
@@ -23,9 +24,14 @@ import ipdb
 def plot3D(x,y,z, title):
     '''Plots anything in 3D. Intended for showing potential surface over 2D plane.'''
     fig = plt.figure()
-    ax = fig.gca(projection='3d')
+    ax = fig.add_subplot(projection='3d')
     surf = ax.plot_trisurf(x,y,z,cmap=cm.coolwarm, linewidth=0, antialiased=False)
     plt.title(title)
+    i=0
+    for X, Y, Z in zip(x, y, z):
+        label = '%d' % i
+        i+=1
+        ax.text(X,Y,Z, label, color='white')
     ax.set_xlabel('x')
     ax.set_ylabel('y')
     ax.set_zlabel('$\phi$')
@@ -147,14 +153,25 @@ def run_environment(elements, nodes, bound, excitation_index, phi_ana):
     print('greens at centers FEM:', greens_at_centers)
     
     # Interpolate to get greens at the center of each node for analytical solution
-    greens_at_centers = []
+    ana_greens_at_centers = []
     for el in range(num_e):
         temp = interpolate_greens(phi_ana, elements, nodes, el, element_area[el])
-        greens_at_centers.append(temp)
-    print('greens at centers Series:', greens_at_centers)
+        ana_greens_at_centers.append(temp)
+    print('greens at centers Series:', ana_greens_at_centers)
     
-    return phi
+    return phi, greens_at_centers, ana_greens_at_centers
 
+
+def determine_constants( sln1, sln2 ):
+    constants1 = np.empty(len(sln1))
+    constants2 = np.empty(len(sln2))
+    for i in range(len(sln1)):
+        constants1[i] = sln1[0][i] - sln1[i][0]
+        constants2[i] = sln2[0][i] - sln2[i][0]
+        sln1[i] = sln1[i] + constants1[i]
+        sln2[i] = sln2[i] + constants2[i]
+    return sln1, sln2  
+    
 #=============================================================================
     # Environments #
 #=============================================================================
@@ -179,13 +196,23 @@ def test_small_square():
                          [8, 4, 2],
                          [8, 9, 4],
                          [9, 6, 4]])
-     bound = np.array([3])                 #set index of a "dirichlet node" which will fix greens at a node
-     excitation_index = np.array([3])      #set index of excited element
-     ana_greens = AnalyticalGreens(2, 2, nodes, elements, excitation_index)  
-     greens = run_environment(elements, nodes, bound, excitation_index, ana_greens)
-     plot3D(nodes[:,0], nodes[:,1], greens,'G('+str(excitation_index[0])+',r) FEM')
+     bound = np.array([3])                 #set index of a "dirichlet node" which will fix greens at a node (one vertex)
+     #excitation_index = np.array([1])      #set index of excited element (whole triangle)
+     #ana_greens = AnalyticalGreens(2, 2, nodes, elements, excitation_index)  
+     #greens_vertices, greens_centers, ana_greens_centers = run_environment(elements, nodes, bound, excitation_index, ana_greens)     
+     greens_slns=[] #list of solutions. each is an array of the greens value for the centers of element due to excitation at the center of anthoer
+     ana_greens_slns=[]
+     for i in range(len(elements)):
+         excitation_index = np.array([i])      #set index of excited element (whole triangle)
+         ana_greens = AnalyticalGreens(2, 2, nodes, elements, excitation_index)  
+         greens_vertices, greens_centers, ana_greens_centers = run_environment(elements, nodes, bound, excitation_index, ana_greens)
+         greens_slns.append(greens_centers)
+         ana_greens_slns.append(ana_greens_centers)
+     #Plots for very last element excitation    
+     plot3D(nodes[:,0], nodes[:,1], greens_vertices,'G('+str(excitation_index[0])+',r) FEM')
      plot3D(nodes[:,0], nodes[:,1], ana_greens,'G('+str(excitation_index[0])+',r) Series')
-     return greens, ana_greens
+         
+     return greens_slns, ana_greens_slns #solutions for the centers of the 8 elements
 
 #=============================================================================
     # MAIN CODE #
@@ -194,7 +221,12 @@ def test_small_square():
 if __name__=="__main__":
   #solves for greens function everywhere due to one excitation, using FEM and series solution.
   #plots the solution and prints the interpolated values at the centers of each element.
-  greens, ana_greens = test_small_square()     
+  
+  greens_raw_slns, ana_greens_raw_slns = test_small_square()
+  greens_slns, ana_greens_slns = determine_constants(greens_raw_slns, ana_greens_raw_slns)
+
+
+  
   
 
 

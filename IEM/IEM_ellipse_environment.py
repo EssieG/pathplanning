@@ -3,9 +3,8 @@ Script: IEM_ellipse.py
 Author: Esther Grossman
 Date: 3/29/21
 
-Solving with pulse basis functions. The start and goal points are ON the boundary.
-Potential specified EVERYWHERE. Normal derivative calculated on all boundaries
-and start/goal position.
+Solving with pulse basis functions. Potential specified on obstacles and boundaries. 
+This code works hand and hand with IEM_ellipse_environment to generate a collision free path.
 
 """
 
@@ -26,7 +25,8 @@ plt.style.use('dark_background')
 def plot3D(x,y,z):
     '''Plots anything in 3D. Intended for showing potential surface over 2D plane.'''
     fig = plt.figure()
-    ax = fig.gca(projection='3d')
+    ax = fig.add_subplot(projection='3d')
+    #ax = fig.gca(projection='3d')
     surf = ax.plot_trisurf(x,y,z,cmap=cm.coolwarm, linewidth=0, antialiased=False)
     plt.title('IEM grid')
     ax.set_xlabel('x')
@@ -43,6 +43,7 @@ def ellipse_collocation(N, center, radii):
     x = np.column_stack((x1,x2))
     return x, t
 
+
 def ellipse_knots(N, center, radii):
     t = np.linspace(0, 2, N)
     tcoll = (t[:-1]+t[1:])/2
@@ -50,6 +51,7 @@ def ellipse_knots(N, center, radii):
     x2 = np.sin(pi*tcoll)*radii[1] + center[1]  
     x = np.column_stack((x1,x2))
     return x
+
 
 def outside_ellipse(pos, c, r):
     '''pos is list of positions Xx2. returns Xx2 array of boolean True/False if inside ellipse'''
@@ -155,6 +157,7 @@ gam_Q[N_environment : ] = 1     #unknown normal derivative on start and goal
 u_indices = np.arange(N_environment, N_total)    #indices where we know u
 gam_indices = np.arange(0,N_environment)         #indices where we know gam
 
+
 #ipdb.set_trace()
 # Set up matrix A (unknowns) 
 A = np.zeros((N_total,N_total))
@@ -241,6 +244,7 @@ ax.quiver(p_goal[:,0],p_goal[:,1], normals2[:,0], normals2[:,1], color ='r')
 # Plot estimated (reconstructed) potential on boundary, given the calculated gamma coefficients
 fig = plt.figure()
 ax = Axes3D(fig)
+fig.add_axes(ax)
 u_bound_est = [] 
 for i in range(N_environment):
     temp = 0

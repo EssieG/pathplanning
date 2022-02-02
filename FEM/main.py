@@ -5,6 +5,8 @@ Dste: 7/23/21
 ECE 222C Project 2 : Find Greens Function for triangular elements on a domain
 using Finite Element Methods. Phi = Greens
 
+Type %matplotlib in the console first to produce plots you can rotate
+
 """
 import numpy as np
 import numpy.linalg as la
@@ -181,7 +183,7 @@ def test_small_square():
      elements = np.loadtxt(fname ='elements_test.txt',delimiter = ",",dtype=int)
      nodes = np.loadtxt(fname = 'node_coord_test.txt',delimiter = ",") + np.ones(2)  #lower left corner is origin.
      bound = np.array([3])                 #set index of a "dirichlet node" which will fix greens at a node
-     excitation_index = np.array([3])      #set index of excited element
+     excitation_index = np.array([5])      #set index of excited element
      greens = run_environment(elements, nodes, bound, excitation_index)
      plot3D(nodes[:,0], nodes[:,1], greens,'G('+str(excitation_index[0])+',r) FEM')
      ana_greens, domain_points = AnalyticalGreens(2, 2, nodes, elements, excitation_index)    

@@ -127,7 +127,7 @@ def intDgreens(p, t1, t2, smas, c, q1, q2, is_selfterm = False):
     # MAIN CODE #
 #============================================================================
 # Set Parameters   
-N_environment = 20                 #SPECIFIC number of points on y (odd number)
+N_environment = 30                 #SPECIFIC number of points on y (odd number)
 N_obstacle = 20
 N_total = N_environment + N_obstacle
 center_of_environment_x = 1        #Where is the center x coordinate of the ellipse. center y will be 1/2*center_x
