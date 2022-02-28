@@ -326,17 +326,15 @@ ax.quiver(pA[:,0],pA[:,1], normals1[:,0], normals1[:,1], color ='r') #U and V ar
 # 
 # =============================================================================
 
-# =============================================================================
-# # Solve for points inside the domain and plot potential inside domain
-# X,Y = np.mgrid[0.1:lseg*nx-0.1:30j, 0.1:lseg*ny-0.1:30j]
-# xy = np.vstack((X.flatten(), Y.flatten())).T #coordinates of interior as MNx2 vector
-# phi = np.zeros((len(xy),1))
-# for i in range(len(xy)):
-#     for k in range(N_total):
-#         phi[i] += 2*(gam_Q[k]*intgreens(xy[i],bounds[k-1],bounds[k])-u_Q[k]*intDgreens(xy[i], bounds[k-1], bounds[k]))
-# plot3D(xy[:,0],xy[:,1], phi[:,0])
-#
-# =============================================================================
+# Solve for points inside the domain and plot potential inside domain
+X,Y = np.mgrid[0.1:lseg*nx-0.1:30j, 0.1:lseg*ny-0.1:30j]
+xy = np.vstack((X.flatten(), Y.flatten())).T #coordinates of interior as MNx2 vector
+phi = np.zeros((len(xy),1))
+for i in range(len(xy)):
+    for k in range(N_total):
+        phi[i] += 2*(gam_Q[k]*intgreens(xy[i],bounds[k-1],bounds[k])-u_Q[k]*intDgreens(xy[i], bounds[k-1], bounds[k]))
+plot3D(xy[:,0],xy[:,1], phi[:,0])
+
 
 
 # condition number of matrix

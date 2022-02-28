@@ -139,16 +139,16 @@ def potential_at_point_in_workspace(point , u, gam, N_env, N_sg, t_env, c_env, r
     return potential 
     
 
-#============================================================================
+#%%============================================================================
     # MAIN CODE #
 #============================================================================
 # Set Parameters   
 N_environment = 30; N_startgoal = 11;     #number on outer bundary and on each of start and goal, check normal directons are all right
 N_total = N_environment + 2 * N_startgoal
-center_environment = [1, 0.5]         #ellipse center
-radii_environment = [1, 0.5]          #major and minor radius of ellipse
-center_start = [.5, 0.3] 
-center_goal = [1.5, 0.7] 
+center_environment = [1, 1]         #ellipse center
+radii_environment = [1.5, 1.5]          #major and minor radius of ellipse
+center_start = [.5, 0.5] 
+center_goal = [1.5, 1.55] 
 radii_startgoal = [0.05, 0.05]
         
 
@@ -219,58 +219,57 @@ gam_Q_environment = gam_Q.copy()
 u_Q_environment = u_Q.copy()
 
 
+# Plot collocation boundary & normals to verify
+fig = plt.figure()
+ax = fig.add_subplot(111)
+plt.plot(environment[:,0], environment[:,1], 'ro')
+plt.plot(p_environment[:,0], p_environment[:,1], 'bo')
+plt.axis('equal')
+normals1 = np.zeros((N_environment,2))
+normals2 = np.zeros((N_startgoal,2))
+for i in range(N_environment):
+    normals1[i] = find_normal(environment[i], environment[i+1])
+for i in range(N_startgoal):
+    normals2[i] = find_normal(start[i], start[i+1])
+ax.quiver(p_environment[:,0],p_environment[:,1], normals1[:,0], normals1[:,1], color ='r') #U and V are the x and y components of the normal vectors
+ax.quiver(p_start[:,0],p_start[:,1], normals2[:,0], normals2[:,1], color ='r')
+ax.quiver(p_goal[:,0],p_goal[:,1], normals2[:,0], normals2[:,1], color ='r')
+
+# Plot estimated (reconstructed) potential on boundary, given the calculated gamma coefficients
+fig = plt.figure()
+ax = Axes3D(fig)
+fig.add_axes(ax)
+u_bound_est = [] 
+for i in range(N_environment):
+    temp = 0
+    for k in range(N_environment):
+        is_self = True if i == k else False
+        temp += 2*(gam_Q[k]*intgreens(p_all[i], t_environment[k], t_environment[k+1], center_environment, radii_environment, is_self) - u_Q[k]*intDgreens(p_all[i], t_environment[k], t_environment[k+1], center_environment, radii_environment, environment[k], environment[k+1], is_self))
+    for k in range(N_startgoal):
+        is_self = True if i == N_environment+k else False
+        temp += - 2*(gam_Q[N_environment+k]*intgreens(p_all[i], t_startgoal[k], t_startgoal[k+1], center_start, radii_startgoal, is_self) - u_Q[N_environment+k]*intDgreens(p_all[i], t_startgoal[k], t_startgoal[k+1], center_start, radii_startgoal, start[k], start[k+1], is_self))
+    for k in range(N_startgoal):
+        is_self = True if i == N_environment+N_startgoal+k else False
+        temp += -2* (gam_Q[N_environment+N_startgoal+k]*intgreens(p_all[i], t_startgoal[k], t_startgoal[k+1], center_goal, radii_startgoal, is_self) - u_Q[N_environment+N_startgoal+k]*intDgreens(p_all[i], t_startgoal[k], t_startgoal[k+1], center_goal, radii_startgoal, goal[k], goal[k+1], is_self))
+    u_bound_est.append(temp)
+ax.plot(list(p_environment[:,0]), list(p_environment[:,1]), u_bound_est, color='blue')
+plt.plot(environment[:,0], environment[:,1], 'ro')
+
 
 # =============================================================================
-# # Plot collocation boundary & normals to verify
-# fig = plt.figure()
-# ax = fig.add_subplot(111)
-# plt.plot(environment[:,0], environment[:,1], 'ro')
-# plt.plot(p_environment[:,0], p_environment[:,1], 'bo')
-# plt.axis('equal')
-# normals1 = np.zeros((N_environment,2))
-# normals2 = np.zeros((N_startgoal,2))
-# for i in range(N_environment):
-#     normals1[i] = find_normal(environment[i], environment[i+1])
-# for i in range(N_startgoal):
-#     normals2[i] = find_normal(start[i], start[i+1])
-# ax.quiver(p_environment[:,0],p_environment[:,1], normals1[:,0], normals1[:,1], color ='r') #U and V are the x and y components of the normal vectors
-# ax.quiver(p_start[:,0],p_start[:,1], normals2[:,0], normals2[:,1], color ='r')
-# ax.quiver(p_goal[:,0],p_goal[:,1], normals2[:,0], normals2[:,1], color ='r')
-# 
-# # Plot estimated (reconstructed) potential on boundary, given the calculated gamma coefficients
-# fig = plt.figure()
-# ax = Axes3D(fig)
-# fig.add_axes(ax)
-# u_bound_est = [] 
-# for i in range(N_environment):
-#     temp = 0
-#     for k in range(N_environment):
-#         is_self = True if i == k else False
-#         temp += 2*(gam_Q[k]*intgreens(p_all[i], t_environment[k], t_environment[k+1], center_environment, radii_environment, is_self) - u_Q[k]*intDgreens(p_all[i], t_environment[k], t_environment[k+1], center_environment, radii_environment, environment[k], environment[k+1], is_self))
-#     for k in range(N_startgoal):
-#         is_self = True if i == N_environment+k else False
-#         temp += - 2*(gam_Q[N_environment+k]*intgreens(p_all[i], t_startgoal[k], t_startgoal[k+1], center_start, radii_startgoal, is_self) - u_Q[N_environment+k]*intDgreens(p_all[i], t_startgoal[k], t_startgoal[k+1], center_start, radii_startgoal, start[k], start[k+1], is_self))
-#     for k in range(N_startgoal):
-#         is_self = True if i == N_environment+N_startgoal+k else False
-#         temp += -2* (gam_Q[N_environment+N_startgoal+k]*intgreens(p_all[i], t_startgoal[k], t_startgoal[k+1], center_goal, radii_startgoal, is_self) - u_Q[N_environment+N_startgoal+k]*intDgreens(p_all[i], t_startgoal[k], t_startgoal[k+1], center_goal, radii_startgoal, goal[k], goal[k+1], is_self))
-#     u_bound_est.append(temp)
-# ax.plot(list(p_environment[:,0]), list(p_environment[:,1]), u_bound_est, color='blue')
-# plt.plot(environment[:,0], environment[:,1], 'ro')
+# # Solve for points inside the domain and plot potential inside domain
+# n = 5; r = np.array(radii_startgoal)+[0.001,0.001]; c = center_start; ng = ellipse_grid_count(n, r, c); filename = 'myellipse.png' 
+# xy_start = ellipse_grid_points(n, r, c, ng).T
+# xy_goal = ellipse_grid_points(n, r, center_goal, ng).T
+# xy_environment = ellipse_grid_points(2*n, np.array(radii_environment)-[0.001,0.001], center_environment, ellipse_grid_count(2*n, np.array(radii_environment)-[0.001,0.001], center_environment)).T
+# xy = outside_ellipse(xy_environment, center_start, radii_startgoal)
+# xy = outside_ellipse(xy, center_goal, radii_startgoal)
+# #ellipse_grid_display( n, r, c, ng, xy_horizontal, filename )
+# phi = np.zeros((len(xy),1))
+# for i in range(len(xy)):                           #There will not be self-terms on the interior
+#     phi[i] = potential_at_point_in_workspace(xy[i], u_Q, gam_Q, N_environment, N_startgoal, t_environment, center_environment, radii_environment, environment, t_startgoal, center_start, center_goal, radii_startgoal, start, goal)
+# plot3D(xy[:,0],xy[:,1], phi[:,0])  
 # =============================================================================
-
-
-# Solve for points inside the domain and plot potential inside domain
-n = 10; r = np.array(radii_startgoal)+[0.001,0.001]; c = center_start; ng = ellipse_grid_count(n, r, c); filename = 'myellipse.png' 
-xy_start = ellipse_grid_points(n, r, c, ng).T
-xy_goal = ellipse_grid_points(n, r, center_goal, ng).T
-xy_environment = ellipse_grid_points(2*n, np.array(radii_environment)-[0.001,0.001], center_environment, ellipse_grid_count(2*n, np.array(radii_environment)-[0.001,0.001], center_environment)).T
-xy = outside_ellipse(xy_environment, center_start, radii_startgoal)
-xy = outside_ellipse(xy, center_goal, radii_startgoal)
-#ellipse_grid_display( n, r, c, ng, xy_horizontal, filename )
-phi = np.zeros((len(xy),1))
-for i in range(len(xy)):                           #There will not be self-terms on the interior
-    phi[i] = potential_at_point_in_workspace(xy[i], u_Q, gam_Q, N_environment, N_startgoal, t_environment, center_environment, radii_environment, environment, t_startgoal, center_start, center_goal, radii_startgoal, start, goal)
-plot3D(xy[:,0],xy[:,1], phi[:,0])  
 
 
 
@@ -280,8 +279,8 @@ plot3D(xy[:,0],xy[:,1], phi[:,0])
 # Set Parameters   
 N_obstacle = 20
 N_total = N_environment + N_obstacle 
-center_obstacle = [1, 0.5]         #ellipse center
-radii_obstacle = [0.3, 0.3]          #major and minor radius of ellipse
+center_obstacle = [1.1, 1.1]         #ellipse center
+radii_obstacle = [1.1, 1.1]          #major and minor radius of ellipse
 
 # Discretize outer boundary
 obstacle, t_obstacle = ellipse_collocation(N_obstacle+1, center_obstacle, radii_obstacle)
@@ -322,23 +321,27 @@ for i in range(N_total):
             
 # Solve matrix equation for gam on environment and obstacle
 gam_Q = la.solve(A,b) 
+print(u_Q)
+print(gam_Q)
 
 #===========================================================================
     # Generate Plots #
 #===========================================================================
 
-
-# Solve for points inside the domain and plot potential inside domain
-n = 10; r = np.array(radii_obstacle)+[0.001,0.001]; c = center_obstacle; ng = ellipse_grid_count(n, r, c); filename = 'myellipse2.png' 
-xy_inner = ellipse_grid_points(n, r, c, ng).T
-xy_outer = ellipse_grid_points(2*n, np.array(radii_environment)-[0.001,0.001], center_environment, ellipse_grid_count(2*n, np.array(radii_environment)-[0.001,0.001], center_environment)).T
-xy = outside_ellipse(xy_outer, c, r)
-#ellipse_grid_display( 2*n+1, 2*r, c, ellipse_grid_count(2*n+1, 2*r, c) , xy_outer, filename )
-phi = np.zeros((len(xy),1))
-for i in range(len(xy)):    
-    phi[i] = potential_at_point_in_obstacle_domain(xy[i], u_Q, gam_Q, N_environment, N_obstacle, t_environment, center_environment, radii_environment, environment, t_obstacle, center_obstacle, radii_obstacle, obstacle)
-plot3D(xy[:,0],xy[:,1], phi[:,0]) 
-
+# =============================================================================
+# 
+# # Solve for points inside the domain and plot potential inside domain
+# n = 6; r = np.array(radii_obstacle)+[0.001,0.001]; c = center_obstacle; ng = ellipse_grid_count(n, r, c); filename = 'myellipse2.png' 
+# xy_inner = ellipse_grid_points(n, r, c, ng).T
+# xy_outer = ellipse_grid_points(2*n, np.array(radii_environment)-[0.001,0.001], center_environment, ellipse_grid_count(2*n, np.array(radii_environment)-[0.001,0.001], center_environment)).T
+# xy = outside_ellipse(xy_outer, c, r)
+# #ellipse_grid_display( 2*n+1, 2*r, c, ellipse_grid_count(2*n+1, 2*r, c) , xy_outer, filename )
+# phi = np.zeros((len(xy),1))
+# for i in range(len(xy)):    
+#     phi[i] = potential_at_point_in_obstacle_domain(xy[i], u_Q, gam_Q, N_environment, N_obstacle, t_environment, center_environment, radii_environment, environment, t_obstacle, center_obstacle, radii_obstacle, obstacle)
+# plot3D(xy[:,0],xy[:,1], phi[:,0]) 
+# 
+# =============================================================================
 
 #%% Generate path
 

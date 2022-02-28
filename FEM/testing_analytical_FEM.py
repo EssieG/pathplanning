@@ -36,6 +36,28 @@ def plot3D(x,y,z, title):
     ax.set_ylabel('y')
     ax.set_zlabel('$\phi$')
     plt.show()
+    
+def AnalyticalGreensEigen(a,b, nodes, elements, excitation_index):
+    ''' get the eigenfunction expansion solution due to one excitation
+    a,b    -> x,y boundaries of the rectangle    
+    '''
+    G=[]
+    [n1, n2, n3] = elements[excitation_index[0]] #node numbers of element e
+    [v1, v2, v3] = [nodes[n1-1],nodes[n2-1],nodes[n3-1]] #coords of each node
+    x_prime = (v1[0]+v2[0]+v3[0])/3
+    y_prime = (v1[1]+v2[1]+v3[1])/3  #coordinates of excitation (lies in the center of an element)
+    
+    for i in range(len(nodes)):
+        summer= 0
+        y = nodes[i,1]
+        x = nodes[i,0]
+        for m in range(1,100):
+            for n in range(1,100):
+                summer += 1/((m*pi/a)**2+(n*pi/b)**2) * np.cos(n*pi*x_prime/a) * np.cos(m*pi*y_prime/b) * np.cos(n*pi*x/a) * np.cos(m*pi*y/b)
+        G.append(summer * -4 / (a*b))
+    
+    return G
+
 
 def AnalyticalGreens(a, b, nodes, elements, excitation_index):
     '''get the series solution of greens everywhere due to one excitation''' 
@@ -204,7 +226,7 @@ def test_small_square():
      ana_greens_slns=[]
      for i in range(len(elements)):
          excitation_index = np.array([i])      #set index of excited element (whole triangle)
-         ana_greens = AnalyticalGreens(2, 2, nodes, elements, excitation_index)  
+         ana_greens = AnalyticalGreensEigen(2, 2, nodes, elements, excitation_index)  
          greens_vertices, greens_centers, ana_greens_centers = run_environment(elements, nodes, bound, excitation_index, ana_greens)
          greens_slns.append(greens_centers)
          ana_greens_slns.append(ana_greens_centers)

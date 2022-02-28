@@ -129,10 +129,10 @@ def intDgreens(p, t1, t2, center, radii, q1, q2, is_selfterm = False):
 # Set Parameters   
 N_environment = 40; N_startgoal = 20;     #number on outer bundary and on each of start and goal
 N_total = 40 + 2 * N_startgoal
-center_environment = [1, 0.5]         #ellipse center
-radii_environment = [1, 0.5]          #major and minor radius of ellipse
-center_start = [.5, 0.3] 
-center_goal = [1.5, 0.7] 
+center_environment = [.8,.8]         #ellipse center
+radii_environment = [.8,.8]          #major and minor radius of ellipse
+center_start = [.4, 0.4]
+center_goal = [1.1, 1.1] 
 radii_startgoal = [0.1, 0.1]
         
 
@@ -263,7 +263,7 @@ plt.plot(environment[:,0], environment[:,1], 'ro')
 
 
 # Solve for points inside the domain and plot potential inside domain
-n = 10; r = np.array(radii_startgoal)+[0.001,0.001]; c = center_start; ng = ellipse_grid_count(n, r, c); filename = 'myellipse.png' 
+n = 5; r = np.array(radii_startgoal)+[0.001,0.001]; c = center_start; ng = ellipse_grid_count(n, r, c); filename = 'myellipse.png' 
 xy_start = ellipse_grid_points(n, r, c, ng).T
 xy_goal = ellipse_grid_points(n, r, center_goal, ng).T
 xy_environment = ellipse_grid_points(2*n, np.array(radii_environment)-[0.001,0.001], center_environment, ellipse_grid_count(2*n, np.array(radii_environment)-[0.001,0.001], center_environment)).T

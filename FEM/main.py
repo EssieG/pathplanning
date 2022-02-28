@@ -31,11 +31,41 @@ def plot3D(x,y,z, title):
     ax.set_ylabel('y')
     ax.set_zlabel('$\phi$')
     plt.show()
+    
+def AnalyticalGreensEigen(a,b, nodes, elements, excitation_index):
+    ''' get the eigenfunction expansion solution due to one excitation
+    a,b    -> x,y boundaries of the rectangle    
+    '''
+    G=[]
+    [n1, n2, n3] = elements[excitation_index[0]] #node numbers of element e
+    [v1, v2, v3] = [nodes[n1-1],nodes[n2-1],nodes[n3-1]] #coords of each node
+    x_prime = (v1[0]+v2[0]+v3[0])/3
+    y_prime = (v1[1]+v2[1]+v3[1])/3  #coordinates of excitation (lies in the center of an element)
+    for i in range(len(nodes)):
+        summer= 0
+        y = nodes[i,1]
+        x = nodes[i,0]
+        for m in range(0,100):
+            for n in range(0,100):
+                if m==0 and n==0:
+                    cmn = 0
+                    continue
+                elif m==0:
+                    cmn = 0.5
+                elif n==0:
+                    cmn = 0.5
+                else:
+                    cmn = 1
+                summer += cmn * (1/((m*pi/a)**2+(n*pi/b)**2) * np.cos(n*pi*x_prime/a) * np.cos(m*pi*y_prime/b) * np.cos(n*pi*x/a) * np.cos(m*pi*y/b))
+        G.append(summer * 4 / (a*b))
+    
+    return G, nodes
 
 def AnalyticalGreens(a, b, nodes, elements, excitation_index):
     '''Define greens''' 
     #ipdb.set_trace()
     G=[]
+    gm=[]
     [n1, n2, n3] = elements[excitation_index[0]] #node numbers of element e
     [v1, v2, v3] = [nodes[n1-1],nodes[n2-1],nodes[n3-1]] #coords of each node
     x, y = np.meshgrid( np.linspace(0,a,20), np.linspace(0,b,20) )
@@ -49,12 +79,57 @@ def AnalyticalGreens(a, b, nodes, elements, excitation_index):
         for m in range(1,100):
             W = np.cosh(m*pi/a*y_prime)*np.sinh(m*pi*(y_prime-b)/a) - np.sinh(m*pi/a*y_prime)*np.cosh(m*pi*(y_prime-b)/a)
             if y > y_prime:
-                g_n = - 2/(m*pi)*np.cosh(m*pi/a*(y-b))*np.cosh(m*pi/a*y_prime)/W*np.cos(m*pi/a*x_prime)
+                g_m = - 2/(m*pi)*np.cosh(m*pi/a*(y-b))*np.cosh(m*pi/a*y_prime)/W*np.cos(m*pi/a*x_prime)
             else:
-                g_n = - 2/(m*pi)*np.cosh(m*pi/a*y)*np.cosh(m*pi/a*(y_prime-b))/W*np.cos(m*pi/a*x_prime)
-            summer += g_n*np.cos(pi*m*x/a)    
+                g_m= - 2/(m*pi)*np.cosh(m*pi/a*y)*np.cosh(m*pi/a*(y_prime-b))/W*np.cos(m*pi/a*x_prime)
+            summer += g_m*np.cos(pi*m*x/a)    
         G.append(summer)
+        
+# =============================================================================
+#     summer=0
+#     y = xy[1,1]
+#     x = xy[1,0]
+#     for m in range(1,100):
+#         W = np.cosh(m*pi/a*y_prime)*np.sinh(m*pi*(y_prime-b)/a) - np.sinh(m*pi/a*y_prime)*np.cosh(m*pi*(y_prime-b)/a)
+#         if y > y_prime:
+#             g_m = - 2/(m*pi)*np.cosh(m*pi/a*(y-b))*np.cosh(m*pi/a*y_prime)/W*np.cos(m*pi/a*x_prime)
+#         else:
+#             g_m = - 2/(m*pi)*np.cosh(m*pi/a*y)*np.cosh(m*pi/a*(y_prime-b))/W*np.cos(m*pi/a*x_prime)
+#         gm.append(g_m)
+#      
+#     m = np.linspace(1,100,1)
+#     fig = plt.figure()
+#     ax = fig.add_subplot(111)
+#     plt.plot(m, gm)
+#     plt.show()
+# =============================================================================
+
+        
     return G, xy
+# =============================================================================
+# 
+# def AnalyticalGreens_nodepoints(a, b, nodes, elements, excitation_index):
+#     '''Define greens''' 
+#     #ipdb.set_trace()
+#     G=[]
+#     [n1, n2, n3] = elements[excitation_index[0]] #node numbers of element e
+#     [v1, v2, v3] = [nodes[n1-1],nodes[n2-1],nodes[n3-1]] #coords of each node
+#     x_prime = (v1[0]+v2[0]+v3[0])/3
+#     y_prime = (v1[1]+v2[1]+v3[1])/3  #coordinates of excitation (lies in the center of an element)
+#     for i in range(len(nodes)):
+#         summer=0
+#         y = nodes[i,1]
+#         x = nodes[i,0]
+#         for m in range(1,100):
+#             W = np.cosh(m*pi/a*y_prime)*np.sinh(m*pi*(y_prime-b)/a) - np.sinh(m*pi/a*y_prime)*np.cosh(m*pi*(y_prime-b)/a)
+#             if y > y_prime:
+#                 g_n = - 2/(m*pi)*np.cosh(m*pi/a*(y-b))*np.cosh(m*pi/a*y_prime)/W*np.cos(m*pi/a*x_prime)
+#             else:
+#                 g_n = - 2/(m*pi)*np.cosh(m*pi/a*y)*np.cosh(m*pi/a*(y_prime-b))/W*np.cos(m*pi/a*x_prime)
+#             summer += g_n*np.cos(pi*m*x/a)    
+#         G.append(summer)
+#     return G, nodes
+# =============================================================================
 
 def AnalyticalGreens_nodepoints(a, b, nodes, elements, excitation_index):
     '''Define greens''' 
@@ -65,19 +140,51 @@ def AnalyticalGreens_nodepoints(a, b, nodes, elements, excitation_index):
     x_prime = (v1[0]+v2[0]+v3[0])/3
     y_prime = (v1[1]+v2[1]+v3[1])/3  #coordinates of excitation (lies in the center of an element)
     for i in range(len(nodes)):
-        summer=0
+        summer = 0
+        summer_old = 0
         y = nodes[i,1]
         x = nodes[i,0]
-        for m in range(1,100):
+        
+        #if abs(x_prime-x) > abs(y_prime-y):
+        m=1
+        while True:
             W = np.cosh(m*pi/a*y_prime)*np.sinh(m*pi*(y_prime-b)/a) - np.sinh(m*pi/a*y_prime)*np.cosh(m*pi*(y_prime-b)/a)
             if y > y_prime:
                 g_n = - 2/(m*pi)*np.cosh(m*pi/a*(y-b))*np.cosh(m*pi/a*y_prime)/W*np.cos(m*pi/a*x_prime)
             else:
                 g_n = - 2/(m*pi)*np.cosh(m*pi/a*y)*np.cosh(m*pi/a*(y_prime-b))/W*np.cos(m*pi/a*x_prime)
             summer += g_n*np.cos(pi*m*x/a)    
+
+            if abs(summer_old-summer) < 0.001:
+                break
+            summer_old = summer
+            m+=1
         G.append(summer)
+    
+    #Plot the convergence of gn to test solution
+    ipdb.set_trace()
+    plot_convergence(a,b,0.5,1.8, 0.75,1.75) #x, y, x',y'
+                
     return G, nodes
-     
+
+def plot_convergence(a,b, x, y, x_prime, y_prime ):
+    '''Plot g_n vs m for different values of y and yprime)'''
+    gm = []
+    m_s = np.linspace(1,100,100)
+    for m in range(1,101):
+        W = np.cosh(m*pi/a*y_prime)*np.sinh(m*pi*(y_prime-b)/a) - np.sinh(m*pi/a*y_prime)*np.cosh(m*pi*(y_prime-b)/a)
+        if y > y_prime:
+            g_m = - 2/(m*pi)*np.cosh(m*pi/a*(y-b))*np.cosh(m*pi/a*y_prime)/W*np.cos(m*pi/a*x_prime)
+        else:
+            g_m = - 2/(m*pi)*np.cosh(m*pi/a*y)*np.cosh(m*pi/a*(y_prime-b))/W*np.cos(m*pi/a*x_prime)
+        gm.append(g_m)
+    print(m_s)
+    print(gm)
+    plt.plot(m_s, gm)
+    plt.show()
+   
+
+ 
 # Solve for the local K matrix of a given element
 def get_Ke(elements,nodes,e,A):
     '''Input array of element indices, array of node coordinates, element number,
@@ -118,7 +225,7 @@ def get_Be(e, A, excitation_element):
         b = np.zeros(3)
     return b
 
-def run_environment(elements, nodes, bound, excitation_index):  
+def run_environment(elements, nodes, bound, excitation_index, phi_ana):  
     # Calculate the area of each element
     element_area=[]
     for i in elements:
@@ -161,6 +268,8 @@ def run_environment(elements, nodes, bound, excitation_index):
                 b_global[i] -= K_global[i,n]*b_global[n]  
                 K_global[i,n] = 0
     
+    print(la.det(K_global))
+    
     # Solve matrix
     phi = la.solve(K_global,b_global)
     
@@ -169,11 +278,26 @@ def run_environment(elements, nodes, bound, excitation_index):
     for el in range(num_e):
         temp = interpolate_greens(phi, elements, nodes, el, element_area[el])
         greens_at_centers.append(temp)
-    #print('greens at centers FEM:', greens_at_centers)
-    print(greens_at_centers[excitation_index[0]])
-    print(la.cond(K_global))
+        
+    # Interpolate to get greens at the center of each node for analytical solution
+    ana_greens_at_centers = []
+    for el in range(num_e):
+        temp = interpolate_greens(phi_ana, elements, nodes, el, element_area[el])
+        ana_greens_at_centers.append(temp)
+  
+    #print(la.cond(K_global))
     
-    return phi
+    return phi, greens_at_centers, ana_greens_at_centers
+
+def determine_constants( sln1, sln2 ):
+    constants1 = np.empty(len(sln1))
+    constants2 = np.empty(len(sln2))
+    for i in range(len(sln1)):
+        constants1[i] = sln1[0][i] - sln1[i][0]
+        constants2[i] = sln2[0][i] - sln2[i][0]
+        sln1[i] = sln1[i] + constants1[i]
+        sln2[i] = sln2[i] + constants2[i]
+    return sln1, sln2  
 
 #=============================================================================
     # ENVIRONMENTS #
@@ -183,24 +307,41 @@ def test_small_square():
      elements = np.loadtxt(fname ='elements_test.txt',delimiter = ",",dtype=int)
      nodes = np.loadtxt(fname = 'node_coord_test.txt',delimiter = ",") + np.ones(2)  #lower left corner is origin.
      bound = np.array([3])                 #set index of a "dirichlet node" which will fix greens at a node
-     excitation_index = np.array([5])      #set index of excited element
-     greens = run_environment(elements, nodes, bound, excitation_index)
-     plot3D(nodes[:,0], nodes[:,1], greens,'G('+str(excitation_index[0])+',r) FEM')
-     ana_greens, domain_points = AnalyticalGreens(2, 2, nodes, elements, excitation_index)    
-     plot3D(domain_points[:,0], domain_points[:,1], ana_greens,'G('+str(excitation_index[0])+',r) Series')
-     return greens, ana_greens
+     greens_slns=[] #list of solutions. each is an array of the greens value for the centers of element due to excitation at the center of anthoer
+     ana_greens_slns=[]
+    
+     for i in range(len(elements)):
+         excitation_index = np.array([i])      #set index of excited element (whole triangle)
+         ana_greens, _ = AnalyticalGreensEigen(2, 2, nodes, elements, excitation_index)  
+         greens_vertices, greens_centers, ana_greens_centers = run_environment(elements, nodes, bound, excitation_index, ana_greens)
+         greens_slns.append(greens_centers)
+         ana_greens_slns.append(ana_greens_centers)
+     #Plots for very last element excitation    
+     plot3D(nodes[:,0], nodes[:,1], greens_vertices,'G('+str(excitation_index[0])+',r) FEM')
+     plot3D(nodes[:,0], nodes[:,1], ana_greens,'G('+str(excitation_index[0])+',r) Series')
+     
+     return greens_slns, ana_greens_slns
      
 def test_square():
      print('Running test on square...\n')
      elements = np.loadtxt(fname ='elements_box.txt', delimiter = ",",dtype=int)
      nodes = np.loadtxt(fname = 'node_coord_box.txt', delimiter = ",") #lower left corner is origin.
      bound = np.array([3])                  #set index of a "dirichlet node" which will fix greens at a node
-     excitation_index = np.array([70])      #set index of excited element
-     ana_greens, domain_points = AnalyticalGreens_nodepoints(2, 2, nodes, elements, excitation_index) 
-     greens = run_environment(elements, nodes, bound, excitation_index)
-     plot3D(nodes[:,0], nodes[:,1], greens,'G('+str(excitation_index[0])+',r) FEM')
-     plot3D(domain_points[:,0], domain_points[:,1], ana_greens,'G('+str(excitation_index[0])+',r) Series')
-     return greens, ana_greens
+     greens_slns=[] #list of solutions. each is an array of the greens value for the centers of element due to excitation at the center of anthoer
+     ana_greens_slns=[]
+
+     #for i in range(len(elements)):
+     for i in range(3):
+         print('processing node ', i)
+         excitation_index = np.array([i])      #set index of excited element (whole triangle)
+         ana_greens_vertices, _ = AnalyticalGreensEigen(2, 2, nodes, elements, excitation_index)  
+         greens_vertices, greens_centers, ana_greens_centers = run_environment(elements, nodes, bound, excitation_index, ana_greens_vertices)
+         greens_slns.append(greens_centers)
+         ana_greens_slns.append(ana_greens_centers)
+     
+     plot3D(nodes[:,0], nodes[:,1], greens_vertices,'G('+str(excitation_index[0])+',r) FEM')
+     plot3D(nodes[:,0], nodes[:,1], ana_greens_vertices,'G('+str(excitation_index[0])+',r) Series')
+     return greens_slns, ana_greens_slns
     
 
 #=============================================================================
@@ -209,10 +350,13 @@ def test_square():
 
 if __name__=="__main__":
   #solves for greens function everywhere due to one excitation, using FEM and series solution.
-  #greens, ana_greens = test_small_square()  
-  greens, ana_greens = test_square()   
-  #greens, ana_greens = test_maze()
-
+  greens_raw_slns, ana_greens_raw_slns = test_small_square()  
+  #greens_raw_slns, ana_greens_raw_slns = test_square()
+  
+  #Computes the final field, once all the constants are normalized for. 
+  #Each array in the list corresponds to the field due to a particular excitation.
+  #greens_slns[1][2] is the interpolated field at the center of element 2 due to excitation at center of element 1.
+  greens_slns, ana_greens_slns = determine_constants(greens_raw_slns, ana_greens_raw_slns)
 
 
 #=============================================================================
@@ -234,5 +378,6 @@ if __name__=="__main__":
 # goal=np.array([goals-1])  #goal boundaries
 # bounds=bounds-1           #all boundaries
 # ===========================================================================
+
 
 
