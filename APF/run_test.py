@@ -11,6 +11,7 @@ import time
 import matplotlib.pyplot as plt; plt.ion()
 from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+from matplotlib.patches import Ellipse
 import ipdb
 from FEM_domain import FEM_domain
 from IEM_ellipse import IEM_ellipse
@@ -106,7 +107,8 @@ def runtest(base_domain, obstacle_domains, start, goal, verbose = True):
   
   # Call the motion planner
   t0 = tic()
-  path = APF_planner(base_domain, obstacle_domains) #TODO: Path Planner
+  #path = APF_planner2(base_domain, obstacle_domains) #TODO: Path Planner
+  path = APF_planner2(base_domain, obstacle_domains)
   pathArray = np.array(path)
   toc(t0,"Planning")
   
@@ -121,13 +123,28 @@ def runtest(base_domain, obstacle_domains, start, goal, verbose = True):
       plt.title('Trajectory')
       ax.set_xlabel('x')
       ax.set_ylabel('y')
-      #ax.set_xlim(0,2)
-      #ax.set_ylim(0,2)
+      ax.spines['top'].set_visible(False)
+      ax.spines['right'].set_visible(False)   
+      ax.spines['bottom'].set_visible(False)
+      ax.spines['left'].set_visible(False)
       boundary_points = base_domain.get_boundary_points()
-      boundary_points2 = obstacle_domains[0].get_boundary_points()
       ax.plot(boundary_points[:,0], boundary_points[:,1])
-      ax.plot(boundary_points2[:,0], boundary_points2[:,1])
-      ax.plot(pathArray[:,0], pathArray[:,1])
+      for ob in obstacle_domains:   #for planner1 and 2
+          boundary_points = ob.get_boundary_points()
+          ax.plot(boundary_points[:,0], boundary_points[:,1], color = 'r')
+# =============================================================================
+#       for ob in obstacle_domains:
+#           ellipse = Ellipse(ob[0], 2*ob[1][0], 2*ob[1][1], color='thistle')
+#           ax.add_patch(ellipse)
+#       ellipse = Ellipse(base_domain.start, 2*base_domain.startgoal_radii[0], 2*base_domain.startgoal_radii[1], color='pink') #for planner 3
+#       ax.add_patch(ellipse)
+#       ellipse = Ellipse(base_domain.goal, 2*base_domain.startgoal_radii[0], 2*base_domain.startgoal_radii[1], color='pink')
+#       ax.add_patch(ellipse)
+# =============================================================================
+      ax.plot(pathArray[:,0], pathArray[:,1], linestyle='--', marker='o', color='b')
+      ax.plot(base_domain.start[0], base_domain.start[1], marker='X', color='g', markersize = 12)
+      ax.plot(base_domain.goal[0], base_domain.goal[1], marker='*', color='y', markersize = 12)
+ 
       plt.show()
 
   collision = False #collision_check(path, blocks[:])      #False if no collision
@@ -220,7 +237,7 @@ def test_circle():
      success, pathlength = runtest(base_domain, obstacle_domains, base_domain.start, base_domain.goal)
      return   
 
-def test_IEM_doubleCircle():
+def test_IEM_oneCircle():
      print('Running test on double circle...\n')
      start = np.array([0.0, 0.0])
      goal = np.array([2.0, 2.0])
@@ -231,6 +248,48 @@ def test_IEM_doubleCircle():
      obstacle_domains.append(IEM_ellipse(np.array([1.1,1.1]), np.array([1.1,1.1]), 'dirichlet', N = 20, other = base_domain))
      success, pathlength = runtest(base_domain, obstacle_domains, base_domain.start, base_domain.goal)
      return   
+ 
+def test_IEM_threeCircle():
+     print('Running test on triple circle...\n')
+     start = np.array([-5,-5])
+     goal = np.array([7.5,5])
+     center = np.array([0, 0])
+     radii = np.array([10, 10])
+     base_domain = IEM_ellipse(center, radii, 'mixed', start = start, goal = goal)
+     obstacle_domains = []
+     obstacle_domains.append(IEM_ellipse(np.array([1.1,1.1]), np.array([3,3]), 'dirichlet', N = 15, other = base_domain))
+     obstacle_domains.append(IEM_ellipse(np.array([2.5,-5]), np.array([2,2]), 'dirichlet', N = 15, other = base_domain))
+     obstacle_domains.append(IEM_ellipse(np.array([-4,5]), np.array([4, 2]), 'dirichlet', N = 15, other = base_domain))
+     success, pathlength = runtest(base_domain, obstacle_domains, base_domain.start, base_domain.goal)
+     return   
+ 
+def test_IEM_threeCircle_static():
+     print('Running test on triple circle...\n')
+     start = np.array([-5,-5])
+     goal = np.array([7.5,5])
+     center = np.array([0, 0])
+     radii = np.array([10, 10])
+     obstacles = []
+     obstacles.append((np.array([1.1,1.1]), np.array([3,3])))
+     obstacles.append((np.array([2.5,-5]), np.array([2,2])))
+     obstacles.append((np.array([-4,5]), np.array([4, 2])))
+     base_domain = IEM_ellipse(center, radii, 'mixed', start = start, goal = goal, ob_list = obstacles)
+     success, pathlength = runtest(base_domain, obstacles, base_domain.start, base_domain.goal)
+     return  
+ 
+def test_IEM_threeCircle_Greens():
+     print('Running test on triple circle...\n')
+     start = np.array([-5,-5])
+     goal = np.array([7.5,5])
+     center = np.array([0, 0])
+     radii = np.array([10, 10])
+     base_domain = IEM_ellipse(center, radii, 'mixed', start = start, goal = goal)
+     obstacle_domains = []
+     obstacle_domains.append(IEM_ellipse(np.array([1.1,1.1]), np.array([3,3]), 'dirichlet', N = 15, other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_ellipse(np.array([2.5,-5]), np.array([2,2]), 'dirichlet', N = 15, other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_ellipse(np.array([-4,5]), np.array([4, 2]), 'dirichlet', N = 15, other = base_domain, use_Greens = True))
+     success, pathlength = runtest(base_domain, obstacle_domains, base_domain.start, base_domain.goal)
+     return   
     
   
 ##################################### MAIN ####################################
@@ -239,7 +298,10 @@ if __name__=="__main__":
   #test_square()
   #test_circle()
   #test_small_square()
-  test_IEM_doubleCircle()
+  #test_IEM_oneCircle()
+  #test_IEM_threeCircle()
+  #test_IEM_threeCircle_static()
+  test_IEM_threeCircle_Greens()
   
   #plt.show(block=False)
 
