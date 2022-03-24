@@ -16,6 +16,8 @@ import ipdb
 from FEM_domain import FEM_domain
 from IEM_ellipse import IEM_ellipse
 from APF_planner import *
+import imageio
+import os
 
 ''' Use this to measure speed of all functions: python -m cProfile -s cumtime main.py '''
 
@@ -85,8 +87,57 @@ def draw_block_list(ax,blocks):
     h = ax.add_collection3d(pc)
     return h
 
+def plot_animation(trajectory, base, obs ):
+    # frames between transitions
+    n_frames = 1
+    print('Creating charts\n')
+    filenames = []
 
-def runtest(base_domain, obstacle_domains, start, goal, verbose = True):
+    for index in np.arange(0, len(obs[0].movements)-1):
+        # get current and next y coordinates
+        #y = np.array(ob_trajectories[index])
+        #y1 = np.array(ob_trajectories[index+1])
+        fig, ax = plt.subplots()
+        boundary_points = base.co_points
+        ax.plot(boundary_points[:,0], boundary_points[:,1])
+        ax.plot(base.start[0], base.start[1], marker='X', color='g', markersize = 12)
+        ax.plot(base.goal[0], base.goal[1], marker='*', color='y', markersize = 12)
+        # calculate the distance to the next position
+        #y_path = y1 - y 
+        for i in np.arange(0, n_frames + 1):
+            # divide the distance by the number of frames exit
+            # and multiply it by the current frame number
+            #y_temp = (y + (y_path / n_frames) * i)        # plot
+            
+            for j in range(len(obs)):   #for planner1 and 2
+                boundary_points, _ = obs[j].ellipse_collocation(obs[j].N_points+1, obs[j].movements[index], obs[j].radii)
+                ax.plot(boundary_points[:,0], boundary_points[:,1], color = 'r')
+            ax.plot(trajectory[0:index,0], trajectory[0:index,1], linestyle='--', marker='o', color='b')
+            
+            #plt.ylim(0,80)        # build file name and append to list of file names
+            filename = f'gifs/frame_{index}_{i}.png'
+            filenames.append(filename)        # last frame of each viz stays longer
+            if (i == n_frames):
+                for i in range(5):
+                    filenames.append(filename)        # save img
+            fig.savefig(filename)
+            plt.close(fig)       
+    print('Charts saved\n')# Build GIF
+    print('Creating gif\n')
+    with imageio.get_writer('gifs/myplot.gif', mode='I') as writer:
+        for filename in filenames:
+            image = imageio.imread(filename)
+            writer.append_data(image)
+    print('Gif saved\n')
+    print('Removing Images\n')
+    # Remove files
+    for filename in set(filenames):
+        os.remove(filename)
+    print('DONE')
+        
+
+
+def runtest(base_domain, obstacle_domains, start, goal, verbose = True, motion = False):
   '''
   This function:
    * load the provided mapfile
@@ -108,7 +159,7 @@ def runtest(base_domain, obstacle_domains, start, goal, verbose = True):
   # Call the motion planner
   t0 = tic()
   #path = APF_planner2(base_domain, obstacle_domains) #TODO: Path Planner
-  path = APF_planner2(base_domain, obstacle_domains)
+  path = APF_planner4(base_domain, obstacle_domains)
   pathArray = np.array(path)
   toc(t0,"Planning")
   
@@ -119,6 +170,10 @@ def runtest(base_domain, obstacle_domains, start, goal, verbose = True):
 # =============================================================================
 
   if verbose:
+      #ipdb.set_trace()
+      if motion == True:
+          plot_animation(pathArray, base_domain, obstacle_domains)
+      
       fig, ax = plt.subplots()
       plt.title('Trajectory')
       ax.set_xlabel('x')
@@ -133,10 +188,10 @@ def runtest(base_domain, obstacle_domains, start, goal, verbose = True):
           boundary_points = ob.get_boundary_points()
           ax.plot(boundary_points[:,0], boundary_points[:,1], color = 'r')
 # =============================================================================
-#       for ob in obstacle_domains:
+#       for ob in obstacle_domains: #for planner 3
 #           ellipse = Ellipse(ob[0], 2*ob[1][0], 2*ob[1][1], color='thistle')
 #           ax.add_patch(ellipse)
-#       ellipse = Ellipse(base_domain.start, 2*base_domain.startgoal_radii[0], 2*base_domain.startgoal_radii[1], color='pink') #for planner 3
+#       ellipse = Ellipse(base_domain.start, 2*base_domain.startgoal_radii[0], 2*base_domain.startgoal_radii[1], color='pink') 
 #       ax.add_patch(ellipse)
 #       ellipse = Ellipse(base_domain.goal, 2*base_domain.startgoal_radii[0], 2*base_domain.startgoal_radii[1], color='pink')
 #       ax.add_patch(ellipse)
@@ -289,7 +344,56 @@ def test_IEM_threeCircle_Greens():
      obstacle_domains.append(IEM_ellipse(np.array([2.5,-5]), np.array([2,2]), 'dirichlet', N = 15, other = base_domain, use_Greens = True))
      obstacle_domains.append(IEM_ellipse(np.array([-4,5]), np.array([4, 2]), 'dirichlet', N = 15, other = base_domain, use_Greens = True))
      success, pathlength = runtest(base_domain, obstacle_domains, base_domain.start, base_domain.goal)
-     return   
+     return  
+
+def test_IEM_threeCircle_Greens_shifted():
+     print('Running test on triple circle...\n')
+     start = np.array([5,5])
+     goal = np.array([17.5,15])
+     center = np.array([10, 10])
+     radii = np.array([10, 10])
+     base_domain = IEM_ellipse(center, radii, 'mixed', start = start, goal = goal)
+     obstacle_domains = []
+     obstacle_domains.append(IEM_ellipse(np.array([10.1,10.1]), np.array([3,3]), 'dirichlet', N = 15, other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_ellipse(np.array([12.5,5]), np.array([2,2]), 'dirichlet', N = 15, other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_ellipse(np.array([6.5,15]), np.array([3, 2]), 'dirichlet', N = 15, other = base_domain, use_Greens = True))
+     success, pathlength = runtest(base_domain, obstacle_domains, base_domain.start, base_domain.goal)
+     return 
+ 
+def test_IEM_manyCircle_Greens():
+     print('Running test on triple circle...\n')
+     start = np.array([-5,-5])
+     goal = np.array([7.5,5])
+     center = np.array([0, 0])
+     radii = np.array([10, 10])
+     base_domain = IEM_ellipse(center, radii, 'mixed', start = start, goal = goal)
+     obstacle_domains = []
+     obstacle_domains.append(IEM_ellipse(np.array([1.1,1.1]), np.array([.8,.8]), 'dirichlet', N = 15, other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_ellipse(np.array([-7.,-2.5]), np.array([.4,.8]), 'dirichlet', N = 15, other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_ellipse(np.array([0.,5.]), np.array([.7, .5]), 'dirichlet', N = 15, other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_ellipse(np.array([5.,-5.]), np.array([.5, .8]), 'dirichlet', N = 15, other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_ellipse(np.array([6.,0.]), np.array([.9, .9]), 'dirichlet', N = 15, other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_ellipse(np.array([-3.,-5.]), np.array([.5, 2.5]), 'dirichlet', N = 15, other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_ellipse(np.array([-4.3,6.]), np.array([.6, 1]), 'dirichlet', N = 15, other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_ellipse(np.array([2.,-6.]), np.array([.6, 1.5]), 'dirichlet', N = 15, other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_ellipse(np.array([4.,5.]), np.array([.7, .9]), 'dirichlet', N = 15, other = base_domain, use_Greens = True))
+     success, pathlength = runtest(base_domain, obstacle_domains, base_domain.start, base_domain.goal)
+     return 
+ 
+def test_IEM_mazeCircle_Greens():
+     print('Running test on triple circle...\n')
+     start = np.array([-5,-5])
+     goal = np.array([7.5,5])
+     center = np.array([0, 0])
+     radii = np.array([10, 10])
+     base_domain = IEM_ellipse(center, radii, 'mixed', start = start, goal = goal)
+     obstacle_domains = []
+     obstacle_domains.append(IEM_ellipse(np.array([5.0,1.0], dtyp), np.array([.5, 6]), 'dirichlet', N = 15, other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_ellipse(np.array([2.0,-1.0]), np.array([.5, 8]), 'dirichlet', N = 15, other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_ellipse(np.array([0.0,1.0]), np.array([.5, 8]), 'dirichlet', N = 15, other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_ellipse(np.array([-3.0,0.0]), np.array([.5, 6]), 'dirichlet', N = 15, other = base_domain, use_Greens = True))
+     success, pathlength = runtest(base_domain, obstacle_domains, base_domain.start, base_domain.goal)
+     return 
     
   
 ##################################### MAIN ####################################
@@ -301,8 +405,9 @@ if __name__=="__main__":
   #test_IEM_oneCircle()
   #test_IEM_threeCircle()
   #test_IEM_threeCircle_static()
-  test_IEM_threeCircle_Greens()
-  
+  test_IEM_threeCircle_Greens_shifted()
+  #test_IEM_manyCircle_Greens()
+  #test_IEM_mazeCircle_Greens()
   #plt.show(block=False)
 
   #Plot trajectory

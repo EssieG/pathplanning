@@ -21,14 +21,17 @@ from IEM_ellipse import *
 def is_near_goal(p, goal, step):
     return la.norm(p - goal) <= step
 
-def generate_random_movement(obstacle, base):
-    while True:
-        delta_pos = np.random.sample((5,))
-        if outside_ellipse(obstacle, base):
-            continue
-        else:
-            obstacle.center += delta_pos
-            break
+def generate_random_movement(obstacles, max_step, center, radii):
+    for ob in obstacles:
+        delta_pos = max_step*( 2*np.random.sample(2) - 1 )
+        while not inside_base_ellipse(ob.center[0]+delta_pos[0], ob.center[1]+delta_pos[1], center, radii):
+            delta_pos = max_step*( 2*np.random.sample(2) - 1 )
+        #ipdb.set_trace()
+        ob.center += delta_pos
+        #Recalculate ob points
+        ob.points = ob.ellipse_knots(ob.N_points+1, ob.center, ob.radii)
+        ob.movements.append(np.copy(ob.center))
+        
         
 def outside_ellipse(ob, base):
     '''pos is list of positions Xx2. returns Xx2 array of positions that are
@@ -148,12 +151,12 @@ def bilinear_interpolation(x, y, points):
 
 #@cprofiler.profile()
 def APF_planner(base_domain, obstacle_domains):    
-    ''' base_domain is a FEM_domain object, obstacle_domain is a list of FEM_objects '''
+    ''' Version that does not use greens for each obstacle domain '''
     base_domain.calculate_potential_field()
     flag = 0
     
     step_size = 0.5
-    obstacle_threshold = 0.6
+    obstacle_threshold = 0.4
     direction_vectors = []
     direction_vectors.append(np.array([np.sqrt(1/2), np.sqrt(1/2)]) ) #take first step out of start 
     trajectory = [base_domain.start]
@@ -223,10 +226,10 @@ def APF_planner(base_domain, obstacle_domains):
 
 def APF_planner2(base_domain, obstacle_domains):    
     ''' This planner samples the boundary Green's function for use in obstacle domain calculations.
+    The obstacles MOVE.
     '''
+    flag = 0   
     base_domain.calculate_potential_field()
-    #xx, yy, G_free, G_scatter, G_total = greens_eigenfunction_expansion_for_circle(base_domain.center, base_domain.radii)
-    flag = 0
     
     step_size = 0.5
     obstacle_threshold = 0.6
@@ -235,6 +238,7 @@ def APF_planner2(base_domain, obstacle_domains):
     trajectory = [base_domain.start]
     trajectory.append(trajectory[-1] + np.array([step_size, step_size]) ) #take first step out of start
     for obstacle in obstacle_domains:
+        obstacle.movements.append(np.copy(obstacle.center))
         obstacle.calculate_potential_field()
         
     #test_G_scattered(obstacle_domains[0])
@@ -267,7 +271,10 @@ def APF_planner2(base_domain, obstacle_domains):
                         direction_check = False 
                     E_perp = direction * E_perp
                     trajectory.append( trajectory[-1] + step_size * E_perp )
-                    
+                    generate_random_movement(obstacle_domains, step_size, base_domain.center, base_domain.radii)
+                    for obstacle in obstacle_domains:
+                        obstacle.calculate_potential_field()
+        
               
                     for other_ob in obstacle_domains: #check for intersection with other obstacles
                         if other_ob == ob:
@@ -286,6 +293,9 @@ def APF_planner2(base_domain, obstacle_domains):
                         break
 
         trajectory.append( trajectory[-1] + step_size * Ebase_normalized ) 
+        generate_random_movement(obstacle_domains, step_size, base_domain.center, base_domain.radii)
+        for obstacle in obstacle_domains:
+            obstacle.calculate_potential_field()
         #ipdb.set_trace()
         #debugging
         flag +=1
@@ -331,5 +341,83 @@ def APF_planner3(base_domain):
        # print(trajectory[-1])
     return trajectory
 
+
+def APF_planner4(base_domain, obstacle_domains):    
+    ''' This planner samples the boundary Green's function for use in obstacle domain calculations.
+    It is a stationary environment algorithm.
+    '''
+    flag = 0   
+    base_domain.calculate_potential_field()
+    g_densities, dg_densities = base_domain.calculate_greens_densities()
     
+    step_size = 0.5
+    obstacle_threshold = 0.6
+    direction_vectors = []
+    direction_vectors.append(np.array([np.sqrt(1/2), np.sqrt(1/2)]) ) #take first step out of start 
+    trajectory = [base_domain.start]
+    trajectory.append(trajectory[-1] + np.array([step_size, step_size]) ) #take first step out of start
+    for obstacle in obstacle_domains:
+        obstacle.dg_on_bounds = dg_densities
+        obstacle.g_on_bounds = g_densities
+        obstacle.calculate_potential_field()
+    
+    while not is_near_goal(trajectory[-1], base_domain.goal, step_size):
+        U_base = base_domain.Ufield(trajectory[-1])
+        E_base = base_domain.Efield(trajectory[-1])
+        Ebase_normalized = E_base/la.norm(E_base)
+        
+        #ipdb.set_trace()
+        for ob in obstacle_domains:
+            U_obstacle = ob.Ufield(trajectory[-1])
+            if U_obstacle > obstacle_threshold:
+                print('Initiate wall-following')
+                Uin = U_base
+                direction_check = True #check direction of wall following first
+                while True:
+                    E_obstacle = ob.Efield(trajectory[-1])
+                    Eobstacle_normalized = E_obstacle/la.norm(E_obstacle)
+                    if U_base < Uin:
+                        if np.dot(E_obstacle, E_base) >= 0:
+                            break
+                        
+                    E_perp = np.array([-Eobstacle_normalized[1], Eobstacle_normalized[0]])
+                    if direction_check:
+                        if np.dot(E_perp, E_base) >= 0:
+                            direction = +1
+                        else:
+                            direction = -1
+                        direction_check = False 
+                    E_perp = direction * E_perp
+                    trajectory.append( trajectory[-1] + step_size * E_perp ) 
+                   # print(trajectory[-1])
+              
+                    for other_ob in obstacle_domains: #check for intersection with other obstacles
+                        if other_ob == ob:
+                            continue
+                        if other_ob.Ufield(trajectory[-1]) > obstacle_threshold:
+                            #ipdb.set_trace()
+                            ob = other_ob
+                                              
+                    U_base = base_domain.Ufield(trajectory[-1])
+                    E_base = base_domain.Efield(trajectory[-1])
+                    Ebase_normalized = E_base/la.norm(E_base)
+                    #print(trajectory[-1])
+                    flag +=1
+                    if flag > 100:
+                        print('Failure')
+                        break
+
+        trajectory.append( trajectory[-1] + step_size * Ebase_normalized ) 
+       # print(trajectory[-1])
+        #ipdb.set_trace()
+        #debugging
+        flag +=1
+        if flag > 100:
+            print('Failure')
+            break
+        if trajectory[-1].any() > 3 or trajectory[-1].any() < -3:
+            print('Error: Trajectory out of bounds')
+            break
+       # print(trajectory[-1])
+    return trajectory  
     

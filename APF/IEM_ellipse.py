@@ -25,10 +25,11 @@ class IEM_ellipse:
     ''' let boundary be another object of IEM_ellipse (base_domain)
     ob_list is a list of (center, radii) tuples
     '''
+    self.movements = [np.copy(center)]
     self.center = center
     self.radii = radii     
     self.boundary_type = boundary_type  #dirichlet, neumann, mixed
-    self.N_points = N                  #number of discretized points
+    self.N_points = N                   #number of discretized points
     self.co_points, self.co_points_t = self.ellipse_collocation(self.N_points+1, self.center, self.radii)  #loc of collocation points
     self.points = self.ellipse_knots(self.N_points+1, self.center, self.radii) #loc of points (p)
     #self.points_t = np.absolute(self.co_points_t[:-1] + self.co_points_t[1:])/2      #parameterization of points
@@ -93,6 +94,11 @@ class IEM_ellipse:
     return x
 
 
+  def greens(self, p, p2):
+    Greens = -1/(2*pi) * ln(sqrt((p[0]-p2[0])**2+(p[1]-p2[1])**2))
+    return Greens
+
+
   def intgreens(self, p, t1, t2, center, radii, is_selfterm = False):
     '''Input is reference point p and the segment points to integrate Greens function over. Output is 
     integral of Green's potential at point p'''
@@ -151,7 +157,7 @@ class IEM_ellipse:
         #ipdb.set_trace()
         # Set up matrix A (unknowns) 
         A = np.zeros((N_total,N_total))
-       # ipdb.set_trace()
+        #ipdb.set_trace()
         for i in range(N_total):
             for k in range(self.N_points):   #when integrating over environment segment
                 is_self = True if i == k else False
@@ -168,7 +174,7 @@ class IEM_ellipse:
                 for m in range(self.N_ob_points):    #integration over goal segment
                     is_self = True if i == self.N_points+self.N_startgoal_points*2+self.N_ob_points*o+m else False
                     A[i,self.N_points+self.N_startgoal_points*2+self.N_ob_points*o+m] = self.intgreens(p_all[i], self.ob_co_points_t[o][m], self.ob_co_points_t[o][m+1], self.ob_center[o], self.ob_radii[o], is_self)
-      
+        
         # Set up matrix b (knowns)
         b = np.zeros(N_total)
         for i in range(N_total):
@@ -205,28 +211,23 @@ class IEM_ellipse:
             c_Q = np.full(N_total,1/2)
             u_Q = np.ones(N_total)       #obstacles boundary set to 1
             p_all = self.points
-            g_scatter, dg_gradient = G_scattered_at_points(self.points, self.bound_center, self.bound_radii)
-            self.G_scatter_points = g_scatter
-            self.DG_scatter_points = np.empty(g_scatter.shape)
-            
-            
+# =============================================================================
+#             g_scatter, dg_gradient = G_scattered_at_points(self.points, self.bound_center, self.bound_radii)
+# =============================================================================
             # Set up matrix A (unknowns)   
             A = np.zeros((N_total, N_total))
+            b = np.zeros(N_total)
             for i in range(N_total):
                 for k in range(N_total): 
                     is_self = True if i == k else False
+                    g_scatter, dg_gradient = self.Gfield(p_all[i], self.points[k])
                     A[i,k] = - self.intgreens(p_all[i], self.co_points_t[k], self.co_points_t[k+1], self.center, self.radii, is_self)
-                    A[i,k] += - g_scatter[i,k] * get_arc_length(self.co_points_t[k], self.co_points_t[k+1], self.center, self.radii)
-     
+                    A[i,k] += - g_scatter * get_arc_length(self.co_points_t[k], self.co_points_t[k+1], self.center, self.radii)
             # Set up matrix b (knowns)
-            b = np.zeros(N_total)
-            for i in range(N_total):
-                for k in range(N_total):
-                    is_self = True if i == k else False
                     exterior_normal = self.find_normal(self.co_points[k], self.co_points[k+1])
-                    self.DG_scatter_points[i,k] = np.dot(dg_gradient[i,k], exterior_normal)
+                    dg_scatter = np.dot(dg_gradient, exterior_normal)
                     b[i] += - u_Q[k]*self.intDgreens(p_all[i], self.co_points_t[k], self.co_points_t[k+1], self.center, self.radii,  self.co_points[k], self.co_points[k+1], is_self)
-                    b[i] += - u_Q[k]*self.DG_scatter_points[i,k] * get_arc_length(self.co_points_t[k], self.co_points_t[k+1], self.center, self.radii) 
+                    b[i] += - u_Q[k]*dg_scatter * get_arc_length(self.co_points_t[k], self.co_points_t[k+1], self.center, self.radii) 
                     if is_self:
                         b[i] +=  u_Q[i]*c_Q[i]     
         else:
@@ -294,12 +295,86 @@ class IEM_ellipse:
         gam_Q = la.solve(A,b) 
     
     self.u_on_bounds, self.gam_on_bounds = u_Q, gam_Q
-    self.plot_sample_points_inside()   #debugging
+    #self.plot_sample_points_inside()   #debugging
     #self.plot_normals()
     #self.plot_potential_on_boundaries(p_all)
     
     return
 
+
+  def calculate_greens_densities(self):
+    '''Use IEM to calculate the new greens field anywhere, due to a grid of excitations.
+       Only for base domain objects.
+       ONLY to be used with base domain objects
+       
+    '''
+    xx, yy = np.meshgrid(np.arange(0, 2*self.radii[0]+1, 1.0), np.arange(0, 2*self.radii[1]+1, 1.0))
+    excitations = np.vstack([xx.ravel(), yy.ravel()]).T
+    valid_coords = inside_base_ellipse(excitations[:,0], excitations[:,1], self.center, self.radii)
+    excitations[~valid_coords,:] = np.nan
+    g_on_bounds = []; dg_on_bounds= [];
+    
+    N_total = self.N_points 
+    c_Q = np.full(N_total,1/2)    # 1/2 for environment
+    u_Q = np.zeros(N_total)       # outer boundary set to zero
+    p_all = self.points
+    
+    # Set up matrix A (unknowns)   
+    A = np.zeros((N_total,N_total))
+    for i in range(N_total):
+        for l in range(self.N_points):
+            is_self = True if i == l else False
+            A[i,l] = self.intgreens(p_all[i], self.co_points_t[l], self.co_points_t[l+1], self.center, self.radii, is_self)
+ 
+    for xy_prime in excitations:  
+        if np.isnan(xy_prime).any():
+            g_on_bounds.append(np.nan) 
+            dg_on_bounds.append(np.nan)
+        else:
+            # Set up matrix b (knowns)
+            b = np.zeros(N_total)
+            for i in range(N_total):
+                b[i] = - self.greens(p_all[i], xy_prime)
+                
+            gam_Q = la.solve(A,b)
+            #Save the densities 
+            g_on_bounds.append(u_Q) 
+            dg_on_bounds.append(gam_Q)
+            
+    return g_on_bounds, dg_on_bounds
+    
+          
+  def Gfield(self, point1, point2):
+        '''Used for planner 4. 
+        Given a point, use the corresponding IEM equation to calculate the greens function there due to another point xy_prime'''
+        N_env = self.N_bound_points
+        t_env = self.bound_co_points_t
+        c_env = self.bound_center
+        r_env = self.bound_radii
+        env = self.bound_co_points
+        lbx, lby = np.floor(point2)
+        ubx, uby = np.ceil(point2)
+        if lbx == ubx:
+            ubx += 1
+        if lby == uby:
+            uby += 1
+        interpolation_points = [[lbx, lby], [lbx, uby], [ubx, lby], [ubx, uby]]
+        interpolation_points_and_values = []
+        #ipdb.set_trace()
+        for xy_prime in interpolation_points:
+            xy_prime_index = int(21*xy_prime[1] + xy_prime[0]) 
+            dg = self.dg_on_bounds[xy_prime_index]
+            G_scat = 0
+            for k in range(N_env):
+                G_scat += dg[k]*self.intgreens(point1, t_env[k], t_env[k+1], c_env, r_env)
+            interpolation_points_and_values.append((xy_prime[0], xy_prime[1], G_scat))   
+        #print(interpolation_points_and_values)
+        G_scatter = bilinear_interpolation(point2[0], point2[1], interpolation_points_and_values)
+        DG_gradient = bilinear_gradient_interpolation(point2[0], point2[1], interpolation_points_and_values)
+        #G_free = self.greens(point1, point2)
+                
+        return G_scatter, DG_gradient
+   
 
   def Ufield(self, point):
     potential = 0
@@ -317,11 +392,12 @@ class IEM_ellipse:
         r_ob = self.radii
         ob = self.co_points
         if self.use_Greens == True:
-            G, DG_grad = G_scattered_at_point(point, self.points, c_env, r_env)
+            #G, DG_grad = G_scattered_at_point(point, self.points, c_env, r_env)
             for l in range(N_ob):
+                G_scatter, DG_grad_scatter = self.Gfield(point, self.points[l])
                 exterior_normal = self.find_normal(ob[l], ob[l+1])
-                DG = np.dot(DG_grad[l], exterior_normal)
-                potential += -(gam[l] * (G[l]*get_arc_length(t_ob[l], t_ob[l+1], c_ob, r_ob) + self.intgreens(point, t_ob[l], t_ob[l+1], c_ob, r_ob)) - u[l]*( DG*get_arc_length(t_ob[l], t_ob[l+1], c_ob, r_ob) + self.intDgreens(point, t_ob[l], t_ob[l+1], c_ob, r_ob, ob[l], ob[l+1])))
+                DG_scatter = np.dot(DG_grad_scatter, exterior_normal)
+                potential += -(gam[l] * (G_scatter*get_arc_length(t_ob[l], t_ob[l+1], c_ob, r_ob) + self.intgreens(point, t_ob[l], t_ob[l+1], c_ob, r_ob)) - u[l]*( DG_scatter*get_arc_length(t_ob[l], t_ob[l+1], c_ob, r_ob) + self.intDgreens(point, t_ob[l], t_ob[l+1], c_ob, r_ob, ob[l], ob[l+1])))
         else:
             for k in range(N_env):
                 potential += (gam[k]*self.intgreens(point, t_env[k], t_env[k+1], c_env, r_env) - u[k]*self.intDgreens(point, t_env[k], t_env[k+1], c_env, r_env, env[k], env[k+1]))
@@ -436,7 +512,7 @@ class IEM_ellipse:
   def plot_sample_points_inside(self):
       xy_inside = []
       if self.other == True:
-          n = 5; r = np.array(self.radii)+[0.001,0.001]; c = self.center; ng = ellipse_grid_count(n, r, c)
+          n = 10; r = np.array(self.radii)+[0.001,0.001]; c = self.center; ng = ellipse_grid_count(n, r, c)
           xy_inner = ellipse_grid_points(n, r, c, ng).T
           xy_outer = ellipse_grid_points(2*n, self.bound_radii-[0.001,0.001], self.bound_center, ellipse_grid_count(2*n, self.bound_radii-[0.001,0.001], self.bound_center)).T
           xy, in1 = outside_ellipse(xy_outer, c, r)
@@ -530,7 +606,7 @@ def G_scattered_at_points(points, base_center, base_radii):
         dg_gradient_polar[:,i,1] = 1/(4*np.pi) * 1/(a**4 + R**2*r**2 - 2*a**2*R*r*np.cos(theta-THETA)) * ( 2*a**2*R*np.sin(theta-THETA))            #theta hat direction
         dg_gradient_cart[:,i, 0], dg_gradient_cart[:,i, 1] = pol2cart(dg_gradient_polar[:,i,0], dg_gradient_polar[:,i,1])
      
-    plot3D(x, y, g_scatter[:,7], title = 'Scattering at the obstacle due to the boundary')  
+    #plot3D(x, y, g_scatter[:,7], title = 'Scattering at the obstacle due to the boundary')  
     
     return g_scatter, dg_gradient_cart
 
@@ -589,9 +665,7 @@ def test_G_scattered(ob_domain):
     plot3D(xx[valid_coords], yy[valid_coords], greens_table[:,:,228][valid_coords], title = 'Total G')
     
     plot3D_overlap(xx[valid_coords], yy[valid_coords], g_scatter[:,:,228][valid_coords],ob_domain.points[:,0],ob_domain.points[:,1],g_scatter_ob[:,7], title = 'overlap')
-    
     return
-    
     
 
 def inside_base_ellipse(xx, yy, c, r):
@@ -616,6 +690,48 @@ def get_arc_length(t1, t2, center, radii):
     arclength = scipy.integrate.quad(integral, t1, t2) 
     return arclength[0]
 
+def bilinear_interpolation(x, y, points):
+    '''Interpolate (x,y) from values associated with four points.
+    The four points are a list of four triplets:  (x, y, value).
+    The four points can be in any order.  They should form a rectangle.
+        >>> bilinear_interpolation(12, 5.5,
+        ...                        [(10, 4, 100),
+        ...                         (20, 4, 200),
+        ...                         (10, 6, 150),
+        ...                         (20, 6, 300)])
+        165.0
+    '''
+    # See formula at:  http://en.wikipedia.org/wiki/Bilinear_interpolation
+    points = sorted(points)               # order points by x, then by y
+    (x1, y1, q11), (_x1, y2, q12), (x2, _y1, q21), (_x2, _y2, q22) = points
+
+    if x1 != _x1 or x2 != _x2 or y1 != _y1 or y2 != _y2:
+        raise ValueError('points do not form a rectangle')
+    if not x1 <= x <= x2 or not y1 <= y <= y2:
+        raise ValueError('(x, y) not within the rectangle')
+
+    return (q11 * (x2 - x) * (y2 - y) +
+            q21 * (x - x1) * (y2 - y) +
+            q12 * (x2 - x) * (y - y1) +
+            q22 * (x - x1) * (y - y1)
+           ) / ((x2 - x1) * (y2 - y1) + 0.0)
+
+def bilinear_gradient_interpolation(x, y, points):
+    '''Interpolate (dG/dx,dG/dy) from values associated with four points.
+    The four points are a list of four triplets:  (x, y, value).
+    The four points can be in any order.  They should form a rectangle.
+    '''
+    # See formula at:  http://en.wikipedia.org/wiki/Bilinear_interpolation
+    points = sorted(points)               # order points by x, then by y
+    (x1, y1, q11), (_x1, y2, q12), (x2, _y1, q21), (_x2, _y2, q22) = points
+
+    if x1 != _x1 or x2 != _x2 or y1 != _y1 or y2 != _y2:
+        raise ValueError('points do not form a rectangle')
+    if not x1 <= x <= x2 or not y1 <= y <= y2:
+        raise ValueError('(x, y) not within the rectangle')
+
+    return np.array([ ((q22 - q12) * (y - y1) + (q21 - q11) * (y2 - y)) / ((x2 - x1) * (y2 - y1)) ,  
+                      ((q12 - q11) * (x - x1) + (q22 - q21) * (x2 - x)) / ((x2 - x1) * (y2 - y1)) ])
 
 
     
