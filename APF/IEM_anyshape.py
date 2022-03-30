@@ -3,8 +3,7 @@
 """
 Created on Fri Feb 11 12:41:25 2022
 
-This is a class for storing the small square FEM. The class can e updated once 
-we find a mesh maker in python. right now, just importing some from matlab.
+This is a class for storing the parameters of an integral equations object.
 
 @author: ubuntu
 """
@@ -20,7 +19,7 @@ from matplotlib import cm
 from mpl_toolkits.mplot3d import Axes3D
 import ipdb
 
-class IEM_ellipse:
+class IEM_anyshape:
   def __init__(self, center, radii, boundary_type, N = 30, start = None, goal = None, other = None, use_Greens = False, ob_list = []):
     ''' let boundary be another object of IEM_ellipse (base_domain)
     ob_list is a list of (center, radii) tuples
@@ -76,8 +75,7 @@ class IEM_ellipse:
     
 
   def ellipse_collocation(self, N, center, radii):
-    '''Default center is [1, 1/2], with a major-to-minor axis length ratio of 2:1. 
-    x1 is the major axis, x2 is the minor axis.'''
+    '''Get collocation points'''
     t = np.linspace(0, 2, N)
     x1 = np.cos(pi*t)*radii[0] + center[0]
     x2 = np.sin(pi*t)*radii[1] + center[1] 
@@ -86,6 +84,7 @@ class IEM_ellipse:
 
 
   def ellipse_knots(self, N, center, radii):
+    ''' get boundary points '''
     t = np.linspace(0, 2, N)
     tcoll = (t[:-1]+t[1:])/2
     x1 = np.cos(pi*tcoll)*radii[0] + center[0]
@@ -123,14 +122,14 @@ class IEM_ellipse:
           integral_upper = -(((p[0] * (b1[0] - b2[0]) + p[1] * (b1[1] - b2[1]) + b2[0] * b1[0] + b2[1] * b1[1] - b1[0]**2 - b1[1]**2) * ln(p[0]**2 - 2 * t *(
               p[0] * (b2[0] - b1[0]) + p[1] * (b2[1] - b1[1]) - b2[0] * b1[0] - b2[1]* b1[1] + b1[0]**2 + b1[1]**2) - 2 * p[0] * b1[0] + p[1]**2 - 2 * p[1] * b1[1] + t**2 *(
               b2[0]**2 - 2* b2[0]* b1[0] + b2[1]**2 - 2* b2[1]* b1[1] + b1[0]**2 + b1[1]**2) + b1[0]**2 + b1[1]**2))/(b2[0]**2 - 2* b2[0]* b1[0] + b2[1]**2 - 2* b2[1]* b1[1] + b1[0]**2 + b1[1]**2) + (
-              2* (p[0] *(b1[1] - b2[1]) + p[1]* (b2[0] - b1[0]) - b2[0]* b1[1] + b2[1]* b1[0]) * np.atan((p[0]* (b1[0] - b2[0]) - p[1]* b2[1] + p[1] *b1[1] + b2[0]**2 * t + b2[0] *(
+              2* (p[0] *(b1[1] - b2[1]) + p[1]* (b2[0] - b1[0]) - b2[0]* b1[1] + b2[1]* b1[0]) * np.arctan((p[0]* (b1[0] - b2[0]) - p[1]* b2[1] + p[1] *b1[1] + b2[0]**2 * t + b2[0] *(
               b1[0] - 2* t* b1[0]) + t* b2[1]**2 - 2* t* b2[1] *b1[1] + t *b1[0]**2 + t *b1[1]**2 + b2[1] * b1[1] - b1[0]**2 - b1[1]**2)/(p[0] * (b1[1] - b2[1]) + p[1]* (b2[0] - b1[0]) - b2[0]* b1[1] + b2[1]* b1[0])))/(
               b2[0]**2 - 2* b2[0] *b1[0] + b2[1]**2 - 2* b2[1] *b1[1] + b1[0]**2 + b1[1]**2) + t* ln((p[0] - b2[0]* t + (t - 1)* b1[0])**2 + (p[1] + t *(b1[1] - b2[1]) - b1[1])**2) - 2 *t)/(4*pi)
           #t = 0 ( terms taken out already)
           integral_lower = -(((p[0] * (b1[0] - b2[0]) + p[1] * (b1[1] - b2[1]) + b2[0] * b1[0] + b2[1] * b1[1] - b1[0]**2 - b1[1]**2) * ln(p[0]**2 - 2 * p[0] * b1[0] + p[1]**2 - 2 * p[1] * b1[1] + b1[0]**2 + b1[1]**2))/(
               b2[0]**2 - 2* b2[0]* b1[0] + b2[1]**2 - 2* b2[1]* b1[1] + b1[0]**2 + b1[1]**2) + (
-              2* (p[0] *(b1[1] - b2[1]) + p[1]* (b2[0] - b1[0]) - b2[0]* b1[1] + b2[1]* b1[0]) * np.atan((p[0]* (b1[0] - b2[0]) - p[1]* b2[1] + p[1] *b1[1] + b2[0] *(
-              b1[0] ) + b2[1] * b1[1] - b1[0]**2 - b1[1]**2)/(p[0] (b1[1] - b2[1]) + p[1]* (b2[0] - b1[0]) - b2[0]* b1[1] + b2[1]* b1[0])))/(
+              2* (p[0] *(b1[1] - b2[1]) + p[1]* (b2[0] - b1[0]) - b2[0]* b1[1] + b2[1]* b1[0]) * np.arctan((p[0]* (b1[0] - b2[0]) - p[1]* b2[1] + p[1] *b1[1] + b2[0] *(
+              b1[0] ) + b2[1] * b1[1] - b1[0]**2 - b1[1]**2)/(p[0] *(b1[1] - b2[1]) + p[1]* (b2[0] - b1[0]) - b2[0]* b1[1] + b2[1]* b1[0])))/(
               b2[0]**2 - 2* b2[0] *b1[0] + b2[1]**2 - 2* b2[1] *b1[1] + b1[0]**2 + b1[1]**2))/(4*pi)           
       integral = integral_upper - integral_lower
       integral *= sqrt((b2[0]-b1[0])**2 + (b2[1]-b1[0])**2)
@@ -276,12 +275,18 @@ class IEM_ellipse:
                 for k in range(N_total): 
                     is_self = True if i == k else False
                     g_scatter, dg_gradient = self.Gfield(p_all[i], self.points[k])
-                    A[i,k] = - self.intgreens(p_all[i], self.co_points_t[k], self.co_points_t[k+1], self.center, self.radii, is_self)
+                    #A[i,k] = - self.intgreens(p_all[i], self.co_points_t[k], self.co_points_t[k+1], self.center, self.radii, is_self)
+                    #A[i,k] = - self.intgreens_estimate(p_all[i], self.co_points[k], self.co_points[k+1], is_self)
+                    if is_self:
+                        A[i,k] = - self.intgreens(p_all[i], self.co_points_t[k], self.co_points_t[k+1], self.center, self.radii, is_self)
+                    else:
+                        A[i,k] = - self.greens(p_all[i], p_all[k]) * get_segment_length(self.co_points[k], self.co_points[k+1])
                     A[i,k] += - g_scatter * get_arc_length(self.co_points_t[k], self.co_points_t[k+1], self.center, self.radii)
             # Set up matrix b (knowns)
                     exterior_normal = self.find_normal(self.co_points[k], self.co_points[k+1])
                     dg_scatter = np.dot(dg_gradient, exterior_normal)
                     b[i] += - u_Q[k]*self.intDgreens(p_all[i], self.co_points_t[k], self.co_points_t[k+1], self.center, self.radii,  self.co_points[k], self.co_points[k+1], is_self)
+                    #b[i] += - u_Q[k]*self.intDgreens_estimate(p_all[i], self.co_points[k], self.co_points[k+1])
                     b[i] += - u_Q[k]*dg_scatter * get_arc_length(self.co_points_t[k], self.co_points_t[k+1], self.center, self.radii) 
                     if is_self:
                         b[i] +=  u_Q[i]*c_Q[i]             
@@ -380,7 +385,12 @@ class IEM_ellipse:
     for i in range(N_total):
         for l in range(self.N_points):
             is_self = True if i == l else False
-            A[i,l] = self.intgreens(p_all[i], self.co_points_t[l], self.co_points_t[l+1], self.center, self.radii, is_self)
+            #A[i,l] = self.intgreens(p_all[i], self.co_points_t[l], self.co_points_t[l+1], self.center, self.radii, is_self)
+            #A[i,l] = self.intgreens_estimate(p_all[i], self.co_points[l], self.co_points[l+1], is_self)
+            if is_self:
+                A[i,l] = - self.intgreens(p_all[i], self.co_points_t[l], self.co_points_t[l+1], self.center, self.radii, is_self)
+            else:
+                A[i,l] = - self.greens(p_all[i], p_all[l]) * get_segment_length(self.co_points[l], self.co_points[l+1])
  
     for xy_prime in excitations:  
         if np.isnan(xy_prime).any():
@@ -408,6 +418,7 @@ class IEM_ellipse:
         c_env = self.bound_center
         r_env = self.bound_radii
         env = self.bound_co_points
+        env_p = self.bound_points
         lbx, lby = np.floor(point2)
         ubx, uby = np.ceil(point2)
         if lbx == ubx:
@@ -422,7 +433,9 @@ class IEM_ellipse:
             dg = self.dg_on_bounds[xy_prime_index]
             G_scat = 0
             for k in range(N_env):
-                G_scat += dg[k]*self.intgreens(point1, t_env[k], t_env[k+1], c_env, r_env)
+                #G_scat += dg[k]*self.intgreens(point1, t_env[k], t_env[k+1], c_env, r_env)
+                #G_scat += dg[k]*self.intgreens_estimate(point1, env[k], env[k+1])
+                G_scat += dg[k]*self.greens(point1, env_p[k]) * get_segment_length(env[k], env[k+1])
             interpolation_points_and_values.append((xy_prime[0], xy_prime[1], G_scat))   
         #print(interpolation_points_and_values)
         G_scatter = bilinear_interpolation(point2[0], point2[1], interpolation_points_and_values)
@@ -447,13 +460,16 @@ class IEM_ellipse:
         c_ob = self.center
         r_ob = self.radii
         ob = self.co_points
+        ob_p = self.points
         if self.use_Greens == True:
             #G, DG_grad = G_scattered_at_point(point, self.points, c_env, r_env)
             for l in range(N_ob):
                 G_scatter, DG_grad_scatter = self.Gfield(point, self.points[l])
                 exterior_normal = self.find_normal(ob[l], ob[l+1])
                 DG_scatter = np.dot(DG_grad_scatter, exterior_normal)
-                potential += -(gam[l] * (G_scatter*get_arc_length(t_ob[l], t_ob[l+1], c_ob, r_ob) + self.intgreens(point, t_ob[l], t_ob[l+1], c_ob, r_ob)) - u[l]*( DG_scatter*get_arc_length(t_ob[l], t_ob[l+1], c_ob, r_ob) + self.intDgreens(point, t_ob[l], t_ob[l+1], c_ob, r_ob, ob[l], ob[l+1])))
+                #potential += -(gam[l] * (G_scatter*get_arc_length(t_ob[l], t_ob[l+1], c_ob, r_ob) + self.intgreens(point, t_ob[l], t_ob[l+1], c_ob, r_ob)) - u[l]*( DG_scatter*get_arc_length(t_ob[l], t_ob[l+1], c_ob, r_ob) + self.intDgreens(point, t_ob[l], t_ob[l+1], c_ob, r_ob, ob[l], ob[l+1])))
+                #potential += -(gam[l] * (G_scatter*get_arc_length(t_ob[l], t_ob[l+1], c_ob, r_ob) + self.intgreens_estimate(point, ob[l], ob[l+1])) - u[l]*( DG_scatter*get_arc_length(t_ob[l], t_ob[l+1], c_ob, r_ob) + self.intDgreens(point, t_ob[l], t_ob[l+1], c_ob, r_ob, ob[l], ob[l+1])))
+                potential += -(gam[l] * (G_scatter*get_arc_length(t_ob[l], t_ob[l+1], c_ob, r_ob) + self.greens(point, ob_p[l])*get_segment_length(ob[l], ob[l+1])) - u[l]*( DG_scatter*get_arc_length(t_ob[l], t_ob[l+1], c_ob, r_ob) + self.intDgreens(point, t_ob[l], t_ob[l+1], c_ob, r_ob, ob[l], ob[l+1])))
         else:
             for k in range(N_env):
                 potential += (gam[k]*self.intgreens(point, t_env[k], t_env[k+1], c_env, r_env) - u[k]*self.intDgreens(point, t_env[k], t_env[k+1], c_env, r_env, env[k], env[k+1]))
@@ -568,7 +584,7 @@ class IEM_ellipse:
   def plot_sample_points_inside(self):
       xy_inside = []
       if self.other == True:
-          n = 3; r = np.array(self.radii)+[0.001,0.001]; c = self.center; ng = ellipse_grid_count(n, r, c)
+          n = 5; r = np.array(self.radii)+[0.001,0.001]; c = self.center; ng = ellipse_grid_count(n, r, c)
           xy_inner = ellipse_grid_points(n, r, c, ng).T
           xy_outer = ellipse_grid_points(2*n, self.bound_radii-[0.1,0.1], self.bound_center, ellipse_grid_count(2*n, self.bound_radii-[0.001,0.001], self.bound_center)).T
           xy, in1 = outside_ellipse(xy_outer, c, r)
@@ -577,13 +593,13 @@ class IEM_ellipse:
       elif self.start is None:
           #Planner #3
           # Solve for points inside the domain and plot potential inside domain #NEEDS modifying
-          n = 3; r = np.array(self.radii)+[0.001,0.001]; c = self.center; ng = ellipse_grid_count(n, r, c)
+          n = 5; r = np.array(self.radii)+[0.001,0.001]; c = self.center; ng = ellipse_grid_count(n, r, c)
           xy_outer = ellipse_grid_points(2*n, self.radii-[0.001,0.001], self.center, ellipse_grid_count(2*n, self.radii-[0.001,0.001], self.center)).T
           xy, in1 = outside_ellipse(xy_outer, c, r)
           xy_inside.append(in1)
     
       else:
-          n = 3; #r = np.array(self.startgoal_radii)+[0.001,0.001]; c = self.start; ng = ellipse_grid_count(n, r, c)
+          n = 5; #r = np.array(self.startgoal_radii)+[0.001,0.001]; c = self.start; ng = ellipse_grid_count(n, r, c)
           #xy_start = ellipse_grid_points(n, r, c, ng).T
           #xy_goal = ellipse_grid_points(n, r, self.goal, ng).T
           xy_environment = ellipse_grid_points(2*n, np.array(self.radii)-[0.001,0.001], self.center, ellipse_grid_count(2*n, np.array(self.radii)-[0.001,0.001], self.center)).T
@@ -745,6 +761,10 @@ def get_arc_length(t1, t2, center, radii):
     integral = lambda t : sqrt((-pi*np.sin(pi*t)*radii[0])**2+ (pi*np.cos(pi*t)*radii[1])**2)
     arclength = scipy.integrate.quad(integral, t1, t2) 
     return arclength[0]
+
+def get_segment_length(p1, p2):
+    return np.linalg.norm(p1 - p2)
+
 
 def bilinear_interpolation(x, y, points):
     '''Interpolate (x,y) from values associated with four points.

@@ -3,8 +3,7 @@
 """
 Created on Fri Feb 11 12:41:25 2022
 
-This is a class for storing the small square FEM. The class can e updated once 
-we find a mesh maker in python. right now, just importing some from matlab.
+This is a class for storing the parameters of an integral equations object.
 
 @author: ubuntu
 """
@@ -20,7 +19,7 @@ from matplotlib import cm
 from mpl_toolkits.mplot3d import Axes3D
 import ipdb
 
-class IEM_ellipse:
+class IEM_anyshape:
   def __init__(self, center, radii, boundary_type, N = 30, start = None, goal = None, other = None, use_Greens = False, ob_list = []):
     ''' let boundary be another object of IEM_ellipse (base_domain)
     ob_list is a list of (center, radii) tuples
@@ -30,8 +29,8 @@ class IEM_ellipse:
     self.radii = radii     
     self.boundary_type = boundary_type  #dirichlet, neumann, mixed
     self.N_points = N                   #number of discretized points
-    self.co_points, self.co_points_t = self.ellipse_collocation(self.N_points+1, self.center, self.radii)  #loc of collocation points
-    self.points = self.ellipse_knots(self.N_points+1, self.center, self.radii) #loc of points (p)
+    self.co_points = self.ellipse_collocation(self.N_points+1, self.center, self.radii)  #loc of collocation points
+    self.points = self.ellipse_knots(self.co_points) #loc of points (p)
     #self.points_t = np.absolute(self.co_points_t[:-1] + self.co_points_t[1:])/2      #parameterization of points
     self.start = start
     self.goal = goal
@@ -39,10 +38,10 @@ class IEM_ellipse:
     if start is not None:  
         self.N_startgoal_points = 15  #check normals
         self.startgoal_radii = [0.1, 0.1]
-        self.start_co_points, self.startgoal_co_points_t = self.ellipse_collocation(self.N_startgoal_points+1, self.start, self.startgoal_radii)
-        self.goal_co_points, _ = self.ellipse_collocation(self.N_startgoal_points+1, self.start, self.startgoal_radii)
-        self.start_points = self.ellipse_knots(self.N_startgoal_points+1, self.start, self.startgoal_radii)
-        self.goal_points = self.ellipse_knots(self.N_startgoal_points+1, self.goal, self.startgoal_radii) 
+        self.start_co_points = self.ellipse_collocation(self.N_startgoal_points+1, self.start, self.startgoal_radii)
+        self.goal_co_points = self.ellipse_collocation(self.N_startgoal_points+1, self.goal, self.startgoal_radii)
+        self.start_points = self.ellipse_knots(self.start_co_points)
+        self.goal_points = self.ellipse_knots(self.goal_co_points) 
         self.ob_radii = []
         self.ob_center = []
         self.ob_co_points = []
@@ -52,10 +51,9 @@ class IEM_ellipse:
         for i in range(len(ob_list)):
             self.ob_radii.append(ob_list[i][1])
             self.ob_center.append(ob_list[i][0])
-            temp_co, temp_t = self.ellipse_collocation(self.N_ob_points+1, self.ob_center[i], self.ob_radii[i])
+            temp_co = self.ellipse_collocation(self.N_ob_points+1, self.ob_center[i], self.ob_radii[i])
             self.ob_co_points.append(temp_co)
-            self.ob_co_points_t.append(temp_t)
-            self.ob_points.append(self.ellipse_knots(self.N_ob_points+1, self.ob_center[i], self.ob_radii[i]))
+            self.ob_points.append(self.ellipse_knots(self.ob_co_points[i]))
         #self.startgoal_points_t = np.absolute(self.startgoal_co_points_t[:-1] + self.startgoal_co_points_t[1:])/2  
     self.u_on_bounds, self.gam_on_bounds = None, None
     if other is not None:
@@ -64,8 +62,8 @@ class IEM_ellipse:
         self.bound_center = other.center
         self.bound_radii = other.radii     
         self.N_bound_points = other.N_points                  #number of discretized points
-        self.bound_co_points, self.bound_co_points_t = self.ellipse_collocation(self.N_bound_points+1, self.bound_center, self.bound_radii)  #loc of collocation points
-        self.bound_points = self.ellipse_knots(self.N_bound_points+1, self.bound_center, self.bound_radii) #loc of points (p)
+        self.bound_co_points = self.ellipse_collocation(self.N_bound_points+1, self.bound_center, self.bound_radii)  #loc of collocation points
+        self.bound_points = self.ellipse_knots(self.bound_co_points) #loc of points (p)
     
   def __eq__(self, other):
     return (self.center == other.center).all() and (self.radii == other.radii).all()
@@ -76,21 +74,17 @@ class IEM_ellipse:
     
 
   def ellipse_collocation(self, N, center, radii):
-    '''Default center is [1, 1/2], with a major-to-minor axis length ratio of 2:1. 
-    x1 is the major axis, x2 is the minor axis.'''
+    '''Get collocation points'''
     t = np.linspace(0, 2, N)
     x1 = np.cos(pi*t)*radii[0] + center[0]
     x2 = np.sin(pi*t)*radii[1] + center[1] 
     x = np.column_stack((x1,x2))
-    return x, t
+    return x
 
 
-  def ellipse_knots(self, N, center, radii):
-    t = np.linspace(0, 2, N)
-    tcoll = (t[:-1]+t[1:])/2
-    x1 = np.cos(pi*tcoll)*radii[0] + center[0]
-    x2 = np.sin(pi*tcoll)*radii[1] + center[1]  
-    x = np.column_stack((x1,x2))
+  def ellipse_knots(self, collocation_points):
+    ''' get boundary points '''
+    x = collocation_points[:-1] + 0.5*(collocation_points[1:] - collocation_points[:-1]) 
     return x
 
 
@@ -108,9 +102,11 @@ class IEM_ellipse:
     DGreens = 1/(2*pi)/((p[1]-p2[1])**2+(p[0]-p2[0])**2)*((p[0]-p2[0])*exterior_normal[0] + (p[1]-p2[1])*exterior_normal[1]) 
     return DGreens
 
-  def intgreens_estimate(self, p, b1, b2, is_self = False):
+  def intgreens(self, p, b1, b2, is_self = False):
       '''returns the greens function integrated over a curve, estimated as a linear segment.
          p is the point where the impulse is. b1 and b2 are the boundaries of the curve being integrated over.
+         The analytical expression for this integral over the line segment connecting two boundary points.
+         CORRECT
       '''
       #Using parameterization, from t=0 to t=1. For self terms, need to integrate drom t=0 to t=0.5 and t=0.5 to t=1 separately, if p is the center of the line segment.
       if is_self:  #point at center of segment
@@ -123,30 +119,35 @@ class IEM_ellipse:
           integral_upper = -(((p[0] * (b1[0] - b2[0]) + p[1] * (b1[1] - b2[1]) + b2[0] * b1[0] + b2[1] * b1[1] - b1[0]**2 - b1[1]**2) * ln(p[0]**2 - 2 * t *(
               p[0] * (b2[0] - b1[0]) + p[1] * (b2[1] - b1[1]) - b2[0] * b1[0] - b2[1]* b1[1] + b1[0]**2 + b1[1]**2) - 2 * p[0] * b1[0] + p[1]**2 - 2 * p[1] * b1[1] + t**2 *(
               b2[0]**2 - 2* b2[0]* b1[0] + b2[1]**2 - 2* b2[1]* b1[1] + b1[0]**2 + b1[1]**2) + b1[0]**2 + b1[1]**2))/(b2[0]**2 - 2* b2[0]* b1[0] + b2[1]**2 - 2* b2[1]* b1[1] + b1[0]**2 + b1[1]**2) + (
-              2* (p[0] *(b1[1] - b2[1]) + p[1]* (b2[0] - b1[0]) - b2[0]* b1[1] + b2[1]* b1[0]) * np.atan((p[0]* (b1[0] - b2[0]) - p[1]* b2[1] + p[1] *b1[1] + b2[0]**2 * t + b2[0] *(
+              2* (p[0] *(b1[1] - b2[1]) + p[1]* (b2[0] - b1[0]) - b2[0]* b1[1] + b2[1]* b1[0]) * np.arctan((p[0]* (b1[0] - b2[0]) - p[1]* b2[1] + p[1] *b1[1] + b2[0]**2 * t + b2[0] *(
               b1[0] - 2* t* b1[0]) + t* b2[1]**2 - 2* t* b2[1] *b1[1] + t *b1[0]**2 + t *b1[1]**2 + b2[1] * b1[1] - b1[0]**2 - b1[1]**2)/(p[0] * (b1[1] - b2[1]) + p[1]* (b2[0] - b1[0]) - b2[0]* b1[1] + b2[1]* b1[0])))/(
               b2[0]**2 - 2* b2[0] *b1[0] + b2[1]**2 - 2* b2[1] *b1[1] + b1[0]**2 + b1[1]**2) + t* ln((p[0] - b2[0]* t + (t - 1)* b1[0])**2 + (p[1] + t *(b1[1] - b2[1]) - b1[1])**2) - 2 *t)/(4*pi)
           #t = 0 ( terms taken out already)
           integral_lower = -(((p[0] * (b1[0] - b2[0]) + p[1] * (b1[1] - b2[1]) + b2[0] * b1[0] + b2[1] * b1[1] - b1[0]**2 - b1[1]**2) * ln(p[0]**2 - 2 * p[0] * b1[0] + p[1]**2 - 2 * p[1] * b1[1] + b1[0]**2 + b1[1]**2))/(
               b2[0]**2 - 2* b2[0]* b1[0] + b2[1]**2 - 2* b2[1]* b1[1] + b1[0]**2 + b1[1]**2) + (
-              2* (p[0] *(b1[1] - b2[1]) + p[1]* (b2[0] - b1[0]) - b2[0]* b1[1] + b2[1]* b1[0]) * np.atan((p[0]* (b1[0] - b2[0]) - p[1]* b2[1] + p[1] *b1[1] + b2[0] *(
-              b1[0] ) + b2[1] * b1[1] - b1[0]**2 - b1[1]**2)/(p[0] (b1[1] - b2[1]) + p[1]* (b2[0] - b1[0]) - b2[0]* b1[1] + b2[1]* b1[0])))/(
+              2* (p[0] *(b1[1] - b2[1]) + p[1]* (b2[0] - b1[0]) - b2[0]* b1[1] + b2[1]* b1[0]) * np.arctan((p[0]* (b1[0] - b2[0]) - p[1]* b2[1] + p[1] *b1[1] + b2[0] *(
+              b1[0] ) + b2[1] * b1[1] - b1[0]**2 - b1[1]**2)/(p[0] *(b1[1] - b2[1]) + p[1]* (b2[0] - b1[0]) - b2[0]* b1[1] + b2[1]* b1[0])))/(
               b2[0]**2 - 2* b2[0] *b1[0] + b2[1]**2 - 2* b2[1] *b1[1] + b1[0]**2 + b1[1]**2))/(4*pi)           
       integral = integral_upper - integral_lower
-      integral *= sqrt((b2[0]-b1[0])**2 + (b2[1]-b1[0])**2)
+      integral *= sqrt((b2[0]-b1[0])**2 + (b2[1]-b1[1])**2)
       return integral
       
 
-  def intgreens(self, p, t1, t2, center, radii, is_selfterm = False):
+  def intgreens_quad(self, p, b1, b2, is_selfterm = False):
     '''Input is reference point p and the segment points to integrate Greens function over. Output is 
-    integral of Green's potential at point p'''
-    Greens = lambda t : -1/(2*pi) * ln(sqrt((p[0]-(np.cos(pi*t)*radii[0] + center[0]))**2+(p[1]-(np.sin(pi*t)*radii[1] + center[1]))**2)) * sqrt((-pi*np.sin(pi*t)*radii[0])**2+ (pi*np.cos(pi*t)*radii[1])**2)
+    integral of Green's potential at point p
+    x = b1[0]+ t* (b2[0]-b1[0])
+    y = b1[1] + t* (b2[1]-b1[1])
+    '''
+    t1 = 0; t2 = 1
+    Greens = lambda t : -1/(2*pi) * ln(sqrt((p[0]- (b1[0]+ t* (b2[0]-b1[0])))**2 + (p[1]-(b1[1] + t* (b2[1]-b1[1])))**2)) * sqrt((b2[0]-b1[0])**2+ (b2[1]-b1[1])**2)
     if is_selfterm:
         t_mid = (t1+t2)/2
         Gint = scipy.integrate.quad(Greens, t1, t_mid)[0] + scipy.integrate.quad(Greens, t_mid, t2)[0]
     else:
         Gint = scipy.integrate.quad(Greens, t1, t2)[0]
     return Gint
+
 
   def find_normal(self, q1, q2):
     if np.round(q2[1], 3) == np.round(q1[1],3):
@@ -160,33 +161,54 @@ class IEM_ellipse:
     return normal
 
 
-  def intDgreens(self, p, t1, t2, center, radii, q1, q2, is_selfterm = False):
+  def intDgreens_quad(self, p, b1,b2, is_selfterm = False):
     '''Input is reference point p and the segment points to integrate derivative Greens function over. Output is 
-    integral of grad Green's potential at point p'''
-    exterior_normal = self.find_normal(q1,q2)
-    DGreens = lambda t : 1/(2*pi)/((p[1]-(np.sin(pi*t)*radii[1] + center[1]))**2+(p[0]-(np.cos(pi*t)*radii[0] + center[0]))**2)*((p[0]-(np.cos(pi*t)*radii[0] + center[0]))*exterior_normal[0] + (p[1]-(np.sin(pi*t)*radii[1] + center[1]))*exterior_normal[1]) * sqrt((-pi*np.sin(pi*t)*radii[0])**2+ (pi*np.cos(pi*t)*radii[1])**2)
+    integral of grad Green's potential at point p
+    x = b1[0]+ t* (b2[0]-b1[0])
+    y = b1[1] + t* (b2[1]-b1[1])
+    '''
+    t1 = 0; t2 = 1
+    exterior_normal = self.find_normal(b1,b2)
+    DGreens = lambda t : 1/(2*pi)/((p[1] - (b1[1] + t* (b2[1]-b1[1])))**2+(p[0] - (b1[0]+ t* (b2[0]-b1[0])))**2)*((p[0]-(b1[0]+ t* (b2[0]-b1[0])))*exterior_normal[0] + (p[1]-(b1[1] + t* (b2[1]-b1[1])))*exterior_normal[1]) * sqrt((b2[0]-b1[0])**2+ (b2[1]-b1[1])**2)
     if is_selfterm:
         t_mid = (t1+t2)/2
         DGint = scipy.integrate.quad(DGreens, t1, t_mid)[0] + scipy.integrate.quad(DGreens, t_mid, t2)[0]
     else:
-        DGint = scipy.integrate.quad(DGreens, t1, t2)[0] 
+        DGint = scipy.integrate.quad(DGreens, t1, t2, epsabs = 1.4*10**12)[0] 
     return DGint
 
-  def intDgreens_estimate(self, p, b1, b2):
-    ''' integral((q - (x + t(c - x))) n + (p - (y + t(u - y))) m)/((2 π) ((p - (y + t(u - y)))^2 + (q - (x + t(c - x)))^2)) dt 
+
+  def intDgreens(self, p, b1, b2, is_selfterm = False):
+    ''' Exact integration of 2-dimensional DGreens over a line segment.
+        integral((q - (x + t(c - x))) n + (p - (y + t(u - y))) m)/((2 π) ((p - (y + t(u - y)))^2 + (q - (x + t(c - x)))^2)) dt 
         Calculates greens over a line segment. 
-        Should work for self terms
+        DOESNT WORK FOR SELF TERMS - acoording to wolfram alpha, self terms do not converge.... principal value?
+        integral((p - (x + t (c - x))) n + (q - (y + t (u - y))) m)/((2 π) ((q - (y + t (u - y)))^2 + (p - (x + t (c - x)))^2)) dt = ((-c n + m (y - u) + n x) log(t^2 (c^2 - 2 c x + u^2 - 2 u y + x^2 + y^2) - 2 t (c (p - x) - p x + q (u - y) - u y + x^2 + y^2) + p^2 - 2 p x + q^2 - 2 q y + x^2 + y^2) + 2 (c m - m x + n (y - u)) tan^(-1)((c^2 t + c (-p - 2 t x + x) + p x + q (y - u) + t u^2 - 2 t u y + t x^2 + t y^2 + u y - x^2 - y^2)/(c (q - y) + p (y - u) + x (u - q))))/(4 π (c^2 - 2 c x + u^2 - 2 u y + x^2 + y^2))
     '''
     exterior_normal = self.find_normal(b1,b2)
     #integrate from t = 0 to t= 1
-    t = 1
-    #integral_upper = ((exterior_normal[1]* t* (p - t*(u - y) - y)) + (exterior_normal[0] *t *(-t*(c - x) + q - x)))/(
-    #                  2* pi *((-t*(c - x) + q - x)**2 + (p - t*(u - y) - y)**2))
-    integral_upper = ((exterior_normal[1]* (p[1] - b2[1])) + (exterior_normal[0] *(-b2[0] + p[0])))/(
-                      2* pi *((-b2[0]  + p[0])**2 + (p[1] -b2[1])**2)) 
-    integral_lower = 0
-    integral = integral_upper - integral_lower
-    integral *= sqrt((b2[0]-b1[0])**2 + (b2[1]-b1[0])**2)
+    if is_selfterm:  #point at center of segment
+        #Cauchy integral value, t = 0 to t= 0.5, function is antisymmetric, self terms go to zero
+        #integral_principalValue = -(5.13068* (-c n + m (y - u) + n x))/(c^2 - 2 c x + u**2 - 2 *u *y + x**2 + y**2)
+        integral = 0
+    else:
+        t = 1
+        integral_upper = ((-b2[0] *exterior_normal[0] + exterior_normal[1] *(b1[1] - b2[1]) + exterior_normal[0]* b1[0]) *ln(
+            t**2 *(b2[0]**2 - 2 *b2[0] *b1[0] + b2[1]**2 - 2* b2[1] *b1[1] + b1[0]**2 + b1[1]**2) - 2 *t *(
+            b2[0] * (p[0] - b1[0]) - p[0]* b1[0] + p[1]* (b2[1] - b1[1]) - b2[1] *b1[1] + b1[0]**2 + b1[1]**2) + p[0]**2 - 2* p[0] *b1[0] + p[1]**2 - 2* p[1]*
+            b1[1] + b1[0]**2 + b1[1]**2) + 2* (b2[0] *exterior_normal[1] - exterior_normal[1] *b1[0] + exterior_normal[0] *(b1[1] - b2[1])
+            ) * np.arctan((b2[0]**2 *t + b2[0] *(-p[0] - 2 *t *b1[0] + b1[0]) + p[0]* b1[0] + p[1] *(b1[1] - b2[1]) +
+            t * b2[1]**2 - 2 *t* b2[1] *b1[1] + t* b1[0]**2 + t* b1[1]**2 + b2[1]* b1[1] - b1[0]**2 - b1[1]**2)/(
+            b2[0] * (p[1] - b1[1]) + p[0]* (b1[1] - b2[1]) + b1[0] *(b2[1] - p[1]))))/(4 * pi * (b2[0]**2 - 2* b2[0] *b1[0] + b2[1]**2 - 2 *b2[1]* b1[1] + b1[0]**2 + b1[1]**2)) 
+         #t=0       
+        integral_lower = ((-b2[0] *exterior_normal[0] + exterior_normal[1] *(b1[1] - b2[1]) + exterior_normal[0]* b1[0]) *ln(
+                p[0]**2 - 2* p[0] *b1[0] + p[1]**2 - 2* p[1]* b1[1] + b1[0]**2 + b1[1]**2) + 2* (
+                b2[0] *exterior_normal[1] - exterior_normal[1] *b1[0] + exterior_normal[0] *(b1[1] - b2[1])) * np.arctan(
+                ( b2[0] *(-p[0] + b1[0]) + p[0]* b1[0] + p[1] *(b1[1] - b2[1]) + b2[1]* b1[1] - b1[0]**2 - b1[1]**2)/(
+                b2[0] * (p[1] - b1[1]) + p[0]* (b1[1] - b2[1]) + b1[0] *(b2[1] - p[1]))))/(4 * pi * (b2[0]**2 - 2* b2[0] *b1[0] + b2[1]**2 - 2 *b2[1]* b1[1] + b1[0]**2 + b1[1]**2)) 
+         
+        integral = integral_upper - integral_lower
+        integral *= sqrt((b2[0]-b1[0])**2 + (b2[1]-b1[1])**2)
     return integral
     
     
@@ -216,40 +238,40 @@ class IEM_ellipse:
         for i in range(N_total):
             for k in range(self.N_points):   #when integrating over environment segment
                 is_self = True if i == k else False
-                A[i,k] = self.intDgreens(p_all[i], self.co_points_t[k], self.co_points_t[k+1], self.center, self.radii, self.co_points[k], self.co_points[k+1], is_self)
+                A[i,k] = self.intDgreens(p_all[i], self.co_points[k], self.co_points[k+1], is_self)
                 if is_self:
                     A[i,k] += c_Q[i]
             for l in range(self.N_startgoal_points):    #integration over start segment
                 is_self = True if i == self.N_points+l else False
-                A[i,self.N_points+l] = self.intgreens(p_all[i], self.startgoal_co_points_t[l], self.startgoal_co_points_t[l+1], self.start, self.startgoal_radii, is_self)
+                A[i,self.N_points+l] = self.intgreens(p_all[i], self.start_co_points[l], self.start_co_points[l+1], is_self)
             for h in range(self.N_startgoal_points):    #integration over goal segment
                 is_self = True if i == self.N_points+self.N_startgoal_points+h else False
-                A[i,self.N_points+self.N_startgoal_points+h] = self.intgreens(p_all[i], self.startgoal_co_points_t[h], self.startgoal_co_points_t[h+1], self.goal, self.startgoal_radii, is_self)
+                A[i,self.N_points+self.N_startgoal_points+h] = self.intgreens(p_all[i], self.goal_co_points[h], self.goal_co_points[h+1], is_self)
             for o in range(N_obstacles):
                 for m in range(self.N_ob_points):    #integration over goal segment
                     is_self = True if i == self.N_points+self.N_startgoal_points*2+self.N_ob_points*o+m else False
-                    A[i,self.N_points+self.N_startgoal_points*2+self.N_ob_points*o+m] = self.intgreens(p_all[i], self.ob_co_points_t[o][m], self.ob_co_points_t[o][m+1], self.ob_center[o], self.ob_radii[o], is_self)
+                    A[i,self.N_points+self.N_startgoal_points*2+self.N_ob_points*o+m] = self.intgreens(p_all[i], self.ob_co_points[o][m], self.ob_co_points[o][m+1], is_self)
         
         # Set up matrix b (knowns)
         b = np.zeros(N_total)
         for i in range(N_total):
             for k in range(self.N_points):
                 is_self = True if i ==k else False
-                b[i] += gam_Q[k] * self.intgreens(p_all[i], self.co_points_t[k], self.co_points_t[k+1], self.center, self.radii, is_self)
+                b[i] += gam_Q[k] * self.intgreens(p_all[i], self.co_points[k], self.co_points[k+1], is_self)
             for l in range(self.N_startgoal_points):    #integration over start segment
                 is_self = True if i == self.N_points+l else False
-                b[i] += u_Q[self.N_points+l] * self.intDgreens(p_all[i], self.startgoal_co_points_t[l], self.startgoal_co_points_t[l+1], self.start, self.startgoal_radii, self.start_co_points[l], self.start_co_points[l+1], is_self)     
+                b[i] += u_Q[self.N_points+l] * self.intDgreens(p_all[i], self.start_co_points[l], self.start_co_points[l+1], is_self)     
                 if is_self:
                     b[i] += - u_Q[i]*c_Q[i]
             for h in range(self.N_startgoal_points):    #integration over goal segment
                 is_self = True if i == self.N_points+self.N_startgoal_points+h else False                
-                b[i] += u_Q[self.N_points + self.N_startgoal_points + h] * self.intDgreens(p_all[i], self.startgoal_co_points_t[h], self.startgoal_co_points_t[h+1], self.goal, self.startgoal_radii, self.goal_co_points[h], self.goal_co_points[h+1], is_self)
+                b[i] += u_Q[self.N_points + self.N_startgoal_points + h] * self.intDgreens(p_all[i], self.goal_co_points[h], self.goal_co_points[h+1], is_self)
                 if is_self:
                     b[i] += - u_Q[i]*c_Q[i]      
             for o in range(N_obstacles):
                 for h in range(self.N_ob_points):    #integration over goal segment
                     is_self = True if i == self.N_points + self.N_startgoal_points*2 + self.N_ob_points*o + h else False                
-                    b[i] += u_Q[self.N_points + self.N_startgoal_points*2 + self.N_ob_points*o + h] * self.intDgreens(p_all[i], self.ob_co_points_t[o][h], self.ob_co_points_t[o][h+1], self.ob_center[o], self.ob_radii[o], self.ob_co_points[o][h], self.ob_co_points[o][h+1], is_self)
+                    b[i] += u_Q[self.N_points + self.N_startgoal_points*2 + self.N_ob_points*o + h] * self.intDgreens(p_all[i], self.ob_co_points[o][h], self.ob_co_points[o][h+1], is_self)
                     if is_self:
                         b[i] += - u_Q[i]*c_Q[i]
                            
@@ -276,13 +298,22 @@ class IEM_ellipse:
                 for k in range(N_total): 
                     is_self = True if i == k else False
                     g_scatter, dg_gradient = self.Gfield(p_all[i], self.points[k])
-                    A[i,k] = - self.intgreens(p_all[i], self.co_points_t[k], self.co_points_t[k+1], self.center, self.radii, is_self)
-                    A[i,k] += - g_scatter * get_arc_length(self.co_points_t[k], self.co_points_t[k+1], self.center, self.radii)
+                    A[i,k] = - self.intgreens(p_all[i], self.co_points[k], self.co_points[k+1], is_self)
+                    A[i,k] += - g_scatter * get_segment_length(self.co_points[k], self.co_points[k+1])
+                    #A[i,k] = - self.intgreens_estimate(p_all[i], self.co_points[k], self.co_points[k+1], is_self)
+# =============================================================================
+#                     if is_self:
+#                         A[i,k] = - self.intgreens(p_all[i], self.co_points_t[k], self.co_points_t[k+1], self.center, self.radii, is_self)
+#                     else:
+#                         A[i,k] = - self.greens(p_all[i], p_all[k]) * get_segment_length(self.co_points[k], self.co_points[k+1])
+#                     A[i,k] += - g_scatter * get_arc_length(self.co_points_t[k], self.co_points_t[k+1], self.center, self.radii)
+# =============================================================================
             # Set up matrix b (knowns)
                     exterior_normal = self.find_normal(self.co_points[k], self.co_points[k+1])
                     dg_scatter = np.dot(dg_gradient, exterior_normal)
-                    b[i] += - u_Q[k]*self.intDgreens(p_all[i], self.co_points_t[k], self.co_points_t[k+1], self.center, self.radii,  self.co_points[k], self.co_points[k+1], is_self)
-                    b[i] += - u_Q[k]*dg_scatter * get_arc_length(self.co_points_t[k], self.co_points_t[k+1], self.center, self.radii) 
+                    b[i] += - u_Q[k]*self.intDgreens(p_all[i], self.co_points[k], self.co_points[k+1], is_self)
+                    #b[i] += - u_Q[k]*self.intDgreens_estimate(p_all[i], self.co_points[k], self.co_points[k+1])
+                    b[i] += - u_Q[k]*dg_scatter * get_segment_length(self.co_points[k], self.co_points[k+1]) 
                     if is_self:
                         b[i] +=  u_Q[i]*c_Q[i]             
                 
@@ -300,58 +331,30 @@ class IEM_ellipse:
             for i in range(N_total):
                 for k in range(self.N_bound_points): 
                     is_self = True if i == k else False
-                    A[i,k] = self.intgreens(p_all[i], self.bound_co_points_t[k], self.bound_co_points_t[k+1], self.bound_center, self.bound_radii, is_self)
+                    A[i,k] = self.intgreens(p_all[i], self.bound_co_points[k], self.bound_co_points[k+1], is_self)
                 for l in range(self.N_points):
                     is_self = True if i == self.N_bound_points+l else False
-                    A[i,self.N_bound_points+l] = - self.intgreens(p_all[i], self.co_points_t[l], self.co_points_t[l+1], self.center, self.radii, is_self)
+                    A[i,self.N_bound_points+l] = - self.intgreens(p_all[i], self.co_points[l], self.co_points[l+1], is_self)
             
             # Set up matrix b (knowns)
             b = np.zeros(N_total)
             for i in range(N_total):
                 for k in range(self.N_bound_points):
                     is_self = True if i == k else False
-                    b[i] +=  u_Q[k]*self.intDgreens(p_all[i], self.bound_co_points_t[k], self.bound_co_points_t[k+1], self.bound_center, self.bound_radii,  self.bound_co_points[k], self.bound_co_points[k+1], is_self)
+                    b[i] +=  u_Q[k]*self.intDgreens(p_all[i], self.bound_co_points[k], self.bound_co_points[k+1], is_self)
                     if is_self:
                         b[i] +=  u_Q[i]*c_Q[i]
                 for l in range(self.N_points):
                     is_self = True if i == self.N_bound_points+l else False
-                    b[i] += - u_Q[l+self.N_bound_points]*self.intDgreens(p_all[i], self.co_points_t[l], self.co_points_t[l+1], self.center, self.radii, self.co_points[l], self.co_points[l+1], is_self)
+                    b[i] += - u_Q[l+self.N_bound_points]*self.intDgreens(p_all[i], self.co_points[l], self.co_points[l+1], is_self)
                     if is_self:
                         b[i] += u_Q[i]*c_Q[i]
         
         # Solve matrix equation for gam on environment and obstacle
         gam_Q = la.solve(A,b) 
-        
-        
-    else:   
-        #For Planner #3, we sample a new greens function 
-        # Set up boundary conditions for collocation
-        c_Q = np.full(self.N_points,1/2)   
-        u_Q = np.ones(self.N_points)       #obstacles boundary set to 1
-        p_all = self.points
-        g_scatter, dg_gradient =  G_scattered_at_points(self.points, base_center, base_radii)
-        
-        # Set up matrix A (unknowns)   
-        A = np.zeros((self.N_points,self.N_points))
-        for i in range(self.N_points):             #sum over boundary elements and self.co_points elements
-            for l in range(self.N_points):
-                is_self = True if i == l else False
-                A[i,l] = - self.intgreens(self.points[i], self.co_points_t[l], self.co_points_t[l+1], self.center, self.radii, is_self)
-        
-        # Set up matrix b (knowns)
-        b = np.zeros(self.N_points)
-        for i in range(self.N_points):
-            for l in range(self.N_points):
-                is_self = True if i == l else False
-                b[i] += - u_Q[l]*self.intDgreens(self.points[i], self.co_points_t[l], self.co_points_t[l+1], self.center, self.radii, self.co_points[l], self.co_points[l+1], is_self)
-                if is_self:
-                    b[i] += u_Q[i]*c_Q[i]
-        
-        # Solve matrix equation for gam on environment and obstacle
-        gam_Q = la.solve(A,b) 
     
     self.u_on_bounds, self.gam_on_bounds = u_Q, gam_Q
-    self.plot_sample_points_inside()   #debugging
+    #self.plot_sample_points_inside()   #debugging
     #self.plot_normals()
     #self.plot_potential_on_boundaries(p_all)
     
@@ -380,7 +383,14 @@ class IEM_ellipse:
     for i in range(N_total):
         for l in range(self.N_points):
             is_self = True if i == l else False
-            A[i,l] = self.intgreens(p_all[i], self.co_points_t[l], self.co_points_t[l+1], self.center, self.radii, is_self)
+            A[i,l] = self.intgreens(p_all[i], self.co_points[l], self.co_points[l+1], is_self)
+            #A[i,l] = self.intgreens_estimate(p_all[i], self.co_points[l], self.co_points[l+1], is_self)
+# =============================================================================
+#             if is_self:
+#                 A[i,l] = - self.intgreens(p_all[i], self.co_points_t[l], self.co_points_t[l+1], self.center, self.radii, is_self)
+#             else:
+#                 A[i,l] = - self.greens(p_all[i], p_all[l]) * get_segment_length(self.co_points[l], self.co_points[l+1])
+# =============================================================================
  
     for xy_prime in excitations:  
         if np.isnan(xy_prime).any():
@@ -404,10 +414,10 @@ class IEM_ellipse:
         '''Used for planner 4. 
         Given a point, use the corresponding IEM equation to calculate the greens function there due to another point xy_prime'''
         N_env = self.N_bound_points
-        t_env = self.bound_co_points_t
         c_env = self.bound_center
         r_env = self.bound_radii
         env = self.bound_co_points
+        env_p = self.bound_points
         lbx, lby = np.floor(point2)
         ubx, uby = np.ceil(point2)
         if lbx == ubx:
@@ -422,7 +432,9 @@ class IEM_ellipse:
             dg = self.dg_on_bounds[xy_prime_index]
             G_scat = 0
             for k in range(N_env):
-                G_scat += dg[k]*self.intgreens(point1, t_env[k], t_env[k+1], c_env, r_env)
+                G_scat += dg[k]*self.intgreens(point1, env[k], env[k+1])
+                #G_scat += dg[k]*self.intgreens_estimate(point1, env[k], env[k+1])
+                #G_scat += dg[k]*self.greens(point1, env_p[k]) * get_segment_length(env[k], env[k+1])
             interpolation_points_and_values.append((xy_prime[0], xy_prime[1], G_scat))   
         #print(interpolation_points_and_values)
         G_scatter = bilinear_interpolation(point2[0], point2[1], interpolation_points_and_values)
@@ -438,53 +450,52 @@ class IEM_ellipse:
         u = self.u_on_bounds
         gam = self.gam_on_bounds
         N_env = self.N_bound_points
-        t_env = self.bound_co_points_t
         c_env = self.bound_center
         r_env = self.bound_radii
         env = self.bound_co_points
         N_ob = self.N_points
-        t_ob = self.co_points_t
         c_ob = self.center
         r_ob = self.radii
         ob = self.co_points
+        ob_p = self.points
         if self.use_Greens == True:
             #G, DG_grad = G_scattered_at_point(point, self.points, c_env, r_env)
             for l in range(N_ob):
                 G_scatter, DG_grad_scatter = self.Gfield(point, self.points[l])
                 exterior_normal = self.find_normal(ob[l], ob[l+1])
                 DG_scatter = np.dot(DG_grad_scatter, exterior_normal)
-                potential += -(gam[l] * (G_scatter*get_arc_length(t_ob[l], t_ob[l+1], c_ob, r_ob) + self.intgreens(point, t_ob[l], t_ob[l+1], c_ob, r_ob)) - u[l]*( DG_scatter*get_arc_length(t_ob[l], t_ob[l+1], c_ob, r_ob) + self.intDgreens(point, t_ob[l], t_ob[l+1], c_ob, r_ob, ob[l], ob[l+1])))
+                potential += -(gam[l] * (G_scatter*get_segment_length(ob[l], ob[l+1]) + self.intgreens(point, ob[l], ob[l+1])) - u[l]*( DG_scatter*get_segment_length(ob[l], ob[l+1]) + self.intDgreens(point, ob[l], ob[l+1])))
+                #potential += -(gam[l] * (G_scatter*get_arc_length(t_ob[l], t_ob[l+1], c_ob, r_ob) + self.intgreens_estimate(point, ob[l], ob[l+1])) - u[l]*( DG_scatter*get_arc_length(t_ob[l], t_ob[l+1], c_ob, r_ob) + self.intDgreens(point, t_ob[l], t_ob[l+1], c_ob, r_ob, ob[l], ob[l+1])))
+                #potential += -(gam[l] * (G_scatter*get_arc_length(t_ob[l], t_ob[l+1], c_ob, r_ob) + self.greens(point, ob_p[l])*get_segment_length(ob[l], ob[l+1])) - u[l]*( DG_scatter*get_arc_length(t_ob[l], t_ob[l+1], c_ob, r_ob) + self.intDgreens(point, t_ob[l], t_ob[l+1], c_ob, r_ob, ob[l], ob[l+1])))
         else:
             for k in range(N_env):
-                potential += (gam[k]*self.intgreens(point, t_env[k], t_env[k+1], c_env, r_env) - u[k]*self.intDgreens(point, t_env[k], t_env[k+1], c_env, r_env, env[k], env[k+1]))
+                potential += (gam[k]*self.intgreens(point, env[k], env[k+1]) - u[k]*self.intDgreens(point, env[k], env[k+1]))
             for l in range(N_ob):
-                potential += -(gam[N_env+l]*self.intgreens(point, t_ob[l], t_ob[l+1], c_ob, r_ob) - u[N_env+l]*self.intDgreens(point, t_ob[l], t_ob[l+1], c_ob, r_ob, ob[l], ob[l+1]))
+                potential += -(gam[N_env+l]*self.intgreens(point, ob[l], ob[l+1]) - u[N_env+l]*self.intDgreens(point, ob[l], ob[l+1]))
     else:
         u = self.u_on_bounds
         gam = self.gam_on_bounds
         N_env = self.N_points
-        t_env = self.co_points_t
         c_env = self.center
         r_env = self.radii
         env = self.co_points
         for k in range(N_env):
-            potential += - (gam[k]*self.intgreens(point, t_env[k], t_env[k+1], c_env, r_env) - u[k]*self.intDgreens(point, t_env[k], t_env[k+1], c_env, r_env, env[k], env[k+1]))
+            potential += - (gam[k]*self.intgreens(point, env[k], env[k+1]) - u[k]*self.intDgreens(point, env[k], env[k+1]))
 
         if self.start is not None:
             N_sg = self.N_startgoal_points; N_ob = self.N_ob_points
-            t_sg = self.startgoal_co_points_t; t_ob = self.ob_co_points_t
             c_s = self.start; c_g = self.goal; c_ob = self.ob_center
             r_sg = self.startgoal_radii; r_ob = self.ob_radii
             start = self.start_co_points; ob = self.ob_co_points
             goal = self.goal_co_points
             potential *= -1  #normal points in opposite direction for env
             for k in range(self.N_startgoal_points):
-                potential += - (gam[N_env+k]*self.intgreens(point, t_sg[k], t_sg[k+1], c_s, r_sg) - u[N_env+k]*self.intDgreens(point, t_sg[k], t_sg[k+1], c_s, r_sg, start[k], start[k+1]))
+                potential += - (gam[N_env+k]*self.intgreens(point, start[k], start[k+1]) - u[N_env+k]*self.intDgreens(point, start[k], start[k+1]))
             for k in range(self.N_startgoal_points): 
-                potential += - (gam[N_env+N_sg+k]*self.intgreens(point, t_sg[k], t_sg[k+1], c_g, r_sg) - u[N_env+N_sg+k]*self.intDgreens(point, t_sg[k], t_sg[k+1], c_g, r_sg, goal[k], goal[k+1]))
+                potential += - (gam[N_env+N_sg+k]*self.intgreens(point, goal[k], goal[k+1]) - u[N_env+N_sg+k]*self.intDgreens(point, goal[k], goal[k+1]))
             for o in range(len(c_ob)):
                 for k in range(self.N_ob_points): 
-                   potential += - (gam[N_env+N_sg*2+o*N_ob+k]*self.intgreens(point, t_ob[o][k], t_ob[o][k+1], c_ob[o], r_ob[o]) - u[N_env+N_sg*2+o*N_ob+k]*self.intDgreens(point, t_ob[o][k], t_ob[o][k+1], c_ob[o], r_ob[o], ob[o][k], ob[o][k+1]))
+                   potential += - (gam[N_env+N_sg*2+o*N_ob+k]*self.intgreens(point, ob[o][k], ob[o][k+1]) - u[N_env+N_sg*2+o*N_ob+k]*self.intDgreens(point, ob[o][k], ob[o][k+1]))
     
     return potential   
 
@@ -741,10 +752,9 @@ def cart2pol(x, y):
     phi = np.arctan2(y, x)
     return(rho, phi)
 
-def get_arc_length(t1, t2, center, radii):
-    integral = lambda t : sqrt((-pi*np.sin(pi*t)*radii[0])**2+ (pi*np.cos(pi*t)*radii[1])**2)
-    arclength = scipy.integrate.quad(integral, t1, t2) 
-    return arclength[0]
+def get_segment_length(p1, p2):
+    return np.linalg.norm(p1 - p2)
+
 
 def bilinear_interpolation(x, y, points):
     '''Interpolate (x,y) from values associated with four points.
@@ -789,5 +799,14 @@ def bilinear_gradient_interpolation(x, y, points):
     return np.array([ ((q22 - q12) * (y - y1) + (q21 - q11) * (y2 - y)) / ((x2 - x1) * (y2 - y1)) ,  
                       ((q12 - q11) * (x - x1) + (q22 - q21) * (x2 - x)) / ((x2 - x1) * (y2 - y1)) ])
 
-
+def to_left_of_segment(point, pointA, pointB):
+    ''' given a point and a list of line segments, return true if the point is to the left of every line segment
+    This is used to lay a grid of points over the base_domain.
+    '''
+    return
+    
+    
+    
+    
+    
     

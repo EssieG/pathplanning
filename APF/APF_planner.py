@@ -14,7 +14,8 @@ import matplotlib.pyplot as plt
 import ipdb
 import cprofiler
 from meshEllipse import *
-from IEM_ellipse import *
+#from IEM_ellipse import *
+from IEM_anyshape2 import *
 
 ##################### FUNCTIONS #############################################################
     
@@ -101,55 +102,11 @@ def greens_eigenfunction_expansion_for_circle(center, radii):
     
     return xx, yy, g_free, g_scatter, greens_table
 
-def bilinear_interpolation(x, y, points):
-    '''Interpolate (x,y) from values associated with four points.
-
-    The four points are a list of four triplets:  (x, y, value).
-    The four points can be in any order.  They should form a rectangle.
-
-        >>> bilinear_interpolation(12, 5.5,
-        ...                        [(10, 4, 100),
-        ...                         (20, 4, 200),
-        ...                         (10, 6, 150),
-        ...                         (20, 6, 300)])
-        165.0
-
-    '''
-    # See formula at:  http://en.wikipedia.org/wiki/Bilinear_interpolation
-    points = sorted(points)               # order points by x, then by y
-    (x1, y1, q11), (_x1, y2, q12), (x2, _y1, q21), (_x2, _y2, q22) = points
-
-    if x1 != _x1 or x2 != _x2 or y1 != _y1 or y2 != _y2:
-        raise ValueError('points do not form a rectangle')
-    if not x1 <= x <= x2 or not y1 <= y <= y2:
-        raise ValueError('(x, y) not within the rectangle')
-
-    return (q11 * (x2 - x) * (y2 - y) +
-            q21 * (x - x1) * (y2 - y) +
-            q12 * (x2 - x) * (y - y1) +
-            q22 * (x - x1) * (y - y1)
-           ) / ((x2 - x1) * (y2 - y1) + 0.0)
-
-
-# =============================================================================
-# def interpolate_greens(point, values, radii):
-#     ''' point is a [,] 
-#         values is a 20x20xN_points array of values at the gridpoints
-#         Returns bilinear interpolation of the gridpoints
-#     '''
-#     new_point = point + radii  #align the ellipse in the first quadrant
-#     x1, y1 = np.floor(new_point)
-#     x2, y2 = np.ceil(new_point)
-#     rectangle = [ (x1,y1,values[]), (x1,y2,values[]), (x2,y1,values[]), (x2,y2,values[]) ]
-#     G_at_point = bilinear_interpolation(point[0], point[1], rectangle)
-#     return G_at_point
-# =============================================================================
-    
 
 
 ################## PLANNERS ###################################################################
 
-#@cprofiler.profile()
+
 def APF_planner(base_domain, obstacle_domains):    
     ''' Version that does not use greens for each obstacle domain '''
     base_domain.calculate_potential_field()
@@ -341,7 +298,7 @@ def APF_planner3(base_domain):
        # print(trajectory[-1])
     return trajectory
 
-
+@cprofiler.profile()
 def APF_planner4(base_domain, obstacle_domains):    
     ''' This planner samples the boundary Green's function for use in obstacle domain calculations.
     It is a stationary environment algorithm.
@@ -415,7 +372,7 @@ def APF_planner4(base_domain, obstacle_domains):
         if flag > 100:
             print('Failure')
             break
-        if trajectory[-1].any() > 3 or trajectory[-1].any() < -3:
+        if trajectory[-1].any() > 20 or trajectory[-1].any() < 0:
             print('Error: Trajectory out of bounds')
             break
        # print(trajectory[-1])

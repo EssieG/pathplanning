@@ -14,7 +14,8 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from matplotlib.patches import Ellipse
 import ipdb
 from FEM_domain import FEM_domain
-from IEM_ellipse import IEM_ellipse
+#from IEM_ellipse import IEM_ellipse
+from IEM_anyshape2 import IEM_anyshape
 from APF_planner import *
 import imageio
 import os
@@ -360,6 +361,20 @@ def test_IEM_threeCircle_Greens_shifted():
      success, pathlength = runtest(base_domain, obstacle_domains, base_domain.start, base_domain.goal)
      return 
  
+def test_IEM_threeCircle_Greens_shifted_shape():
+     print('Running test on triple circle...\n')
+     start = np.array([5,5])
+     goal = np.array([17.5,15])
+     center = np.array([10, 10])
+     radii = np.array([10, 10])
+     base_domain = IEM_anyshape(center, radii, 'mixed', start = start, goal = goal)
+     obstacle_domains = []
+     obstacle_domains.append(IEM_anyshape(np.array([10.1,10.1]), np.array([3,3]), 'dirichlet', N = 15, other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_anyshape(np.array([12.5,5]), np.array([2,2]), 'dirichlet', N = 15, other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_anyshape(np.array([6.5,15]), np.array([3, 2]), 'dirichlet', N = 15, other = base_domain, use_Greens = True))
+     success, pathlength = runtest(base_domain, obstacle_domains, base_domain.start, base_domain.goal)
+     return 
+ 
 def test_IEM_manyCircle_Greens():
      print('Running test on triple circle...\n')
      start = np.array([-5,-5])
@@ -405,7 +420,9 @@ if __name__=="__main__":
   #test_IEM_oneCircle()
   #test_IEM_threeCircle()
   #test_IEM_threeCircle_static()
-  test_IEM_threeCircle_Greens_shifted()
+  #test_IEM_threeCircle_Greens()
+  #test_IEM_threeCircle_Greens_shifted()
+  test_IEM_threeCircle_Greens_shifted_shape()
   #test_IEM_manyCircle_Greens()
   #test_IEM_mazeCircle_Greens()
   #plt.show(block=False)
