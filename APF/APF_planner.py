@@ -15,7 +15,7 @@ import ipdb
 import cprofiler
 from meshEllipse import *
 #from IEM_ellipse import *
-from IEM_anyshape2 import *
+from IEM_anyshape2_vector import *
 
 ##################### FUNCTIONS #############################################################
     
@@ -298,15 +298,26 @@ def APF_planner3(base_domain):
        # print(trajectory[-1])
     return trajectory
 
-@cprofiler.profile()
+
+def precompute_boundary(base_d, obstacle_ds):
+    '''Anything that can be precomputed.
+    Base domain potential field
+    Greens function due to the boundary
+    '''
+    base_d.calculate_potential_field()
+    g_densities, dg_densities = base_d.calculate_greens_densities()
+    for obstacle in obstacle_ds:
+        obstacle.dg_on_bounds = dg_densities
+        obstacle.g_on_bounds = g_densities
+    return
+
+
+#@cprofiler.profile()
 def APF_planner4(base_domain, obstacle_domains):    
     ''' This planner samples the boundary Green's function for use in obstacle domain calculations.
     It is a stationary environment algorithm.
     '''
     flag = 0   
-    base_domain.calculate_potential_field()
-    g_densities, dg_densities = base_domain.calculate_greens_densities()
-    
     step_size = 0.5
     obstacle_threshold = 0.6
     direction_vectors = []
@@ -314,10 +325,9 @@ def APF_planner4(base_domain, obstacle_domains):
     trajectory = [base_domain.start]
     trajectory.append(trajectory[-1] + np.array([step_size, step_size]) ) #take first step out of start
     for obstacle in obstacle_domains:
-        obstacle.dg_on_bounds = dg_densities
-        obstacle.g_on_bounds = g_densities
         obstacle.calculate_potential_field()
     
+    print('Finding path ....')
     while not is_near_goal(trajectory[-1], base_domain.goal, step_size):
         U_base = base_domain.Ufield(trajectory[-1])
         E_base = base_domain.Efield(trajectory[-1])

@@ -15,7 +15,7 @@ from matplotlib.patches import Ellipse
 import ipdb
 from FEM_domain import FEM_domain
 #from IEM_ellipse import IEM_ellipse
-from IEM_anyshape2 import IEM_anyshape
+from IEM_anyshape2_vector import *
 from APF_planner import *
 import imageio
 import os
@@ -158,11 +158,11 @@ def runtest(base_domain, obstacle_domains, start, goal, verbose = True, motion =
   # Display the environment
   
   # Call the motion planner
+  precompute_boundary(base_domain, obstacle_domains)
   t0 = tic()
-  #path = APF_planner2(base_domain, obstacle_domains) #TODO: Path Planner
   path = APF_planner4(base_domain, obstacle_domains)
-  pathArray = np.array(path)
   toc(t0,"Planning")
+  pathArray = np.array(path)
   
 # =============================================================================
 #   # Plot the path
@@ -364,14 +364,15 @@ def test_IEM_threeCircle_Greens_shifted():
 def test_IEM_threeCircle_Greens_shifted_shape():
      print('Running test on triple circle...\n')
      start = np.array([5,5])
-     goal = np.array([17.5,15])
+     goal = np.array([16.5,15])
      center = np.array([10, 10])
      radii = np.array([10, 10])
-     base_domain = IEM_anyshape(center, radii, 'mixed', start = start, goal = goal)
+     pts = get_ellipse(30+1, center, radii)
+     base_domain = IEM_anyshape(pts, 'mixed', start = start, goal = goal)
      obstacle_domains = []
-     obstacle_domains.append(IEM_anyshape(np.array([10.1,10.1]), np.array([3,3]), 'dirichlet', N = 15, other = base_domain, use_Greens = True))
-     obstacle_domains.append(IEM_anyshape(np.array([12.5,5]), np.array([2,2]), 'dirichlet', N = 15, other = base_domain, use_Greens = True))
-     obstacle_domains.append(IEM_anyshape(np.array([6.5,15]), np.array([3, 2]), 'dirichlet', N = 15, other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_anyshape(get_ellipse(15, np.array([10.1,10.1]), np.array([3,3])), 'dirichlet', other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_anyshape(get_ellipse(15, np.array([12.5,5]), np.array([2,2])), 'dirichlet', other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_anyshape(get_ellipse(15, np.array([6.5,15]), np.array([2.5, 2])), 'dirichlet', other = base_domain, use_Greens = True))
      success, pathlength = runtest(base_domain, obstacle_domains, base_domain.start, base_domain.goal)
      return 
  
@@ -409,8 +410,86 @@ def test_IEM_mazeCircle_Greens():
      obstacle_domains.append(IEM_ellipse(np.array([-3.0,0.0]), np.array([.5, 6]), 'dirichlet', N = 15, other = base_domain, use_Greens = True))
      success, pathlength = runtest(base_domain, obstacle_domains, base_domain.start, base_domain.goal)
      return 
-    
-  
+
+def test_room_one():
+     print('Running test on room one ...')
+     #ipdb.set_trace()
+     start = np.array([5.0,5.0])
+     goal = np.array([15.5,15])
+     pts = 20* np.load('room1.npy')
+     pts = np.vstack((pts, pts[0]))  #boundary points with first point repeated
+     base_domain = IEM_anyshape(pts, 'mixed', start = start, goal = goal)
+     obstacle_domains = []
+     obstacle_domains.append(IEM_anyshape(get_ellipse(15, np.array([10.1,10.1]), np.array([3,3])), 'dirichlet', other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_anyshape(get_ellipse(15, np.array([12.5,5]), np.array([2,2])), 'dirichlet', other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_anyshape(get_ellipse(15, np.array([6.5,13.5]), np.array([2, 2])), 'dirichlet', other = base_domain, use_Greens = True))
+     success, pathlength = runtest(base_domain, obstacle_domains, base_domain.start, base_domain.goal)
+     return 
+ 
+def test_room_two():
+     print('Running test on Zaids star ...')
+     #ipdb.set_trace()
+     start = np.array([6,12])
+     goal = np.array([13,4])
+     pts = 20* np.load('room2.npy')
+     pts = np.vstack((pts, pts[0]))  #boundary points with first point repeated
+     base_domain = IEM_anyshape(pts, 'mixed', start = start, goal = goal)
+     obstacle_domains = []
+     #obstacle_domains.append(IEM_anyshape(get_ellipse(15, np.array([10.1,10.1]), np.array([3,3])), 'dirichlet', other = base_domain, use_Greens = True))
+     #obstacle_domains.append(IEM_anyshape(get_ellipse(15, np.array([12.5,5]), np.array([2,2])), 'dirichlet', other = base_domain, use_Greens = True))
+     #obstacle_domains.append(IEM_anyshape(get_ellipse(15, np.array([6.5,15]), np.array([3, 2])), 'dirichlet', other = base_domain, use_Greens = True))
+     success, pathlength = runtest(base_domain, obstacle_domains, base_domain.start, base_domain.goal)
+     return   
+
+def test_room_three():
+     print('Running test on Zaids star ...')
+     #ipdb.set_trace()
+     start = np.array([8,8])
+     goal = np.array([12,12])
+     pts = 20* np.load('room3.npy')
+     pts = np.vstack((pts, pts[0]))  #boundary points with first point repeated
+     base_domain = IEM_anyshape(pts, 'mixed', start = start, goal = goal)
+     obstacle_domains = []
+     #obstacle_domains.append(IEM_anyshape(get_ellipse(15, np.array([10.1,10.1]), np.array([3,3])), 'dirichlet', other = base_domain, use_Greens = True))
+     #obstacle_domains.append(IEM_anyshape(get_ellipse(15, np.array([12.5,5]), np.array([2,2])), 'dirichlet', other = base_domain, use_Greens = True))
+     #obstacle_domains.append(IEM_anyshape(get_ellipse(15, np.array([6.5,15]), np.array([3, 2])), 'dirichlet', other = base_domain, use_Greens = True))
+     success, pathlength = runtest(base_domain, obstacle_domains, base_domain.start, base_domain.goal)
+     return 
+ 
+def test_room_four():
+     '''this domain has divide by zero problems likely from sharp edges'''
+     print('Running test on Zaids star ...')
+     #ipdb.set_trace()
+     start = np.array([3,6])
+     #goal = np.array([11,6])
+     goal = np.array([15,15.5])
+     pts = 20* np.load('room4.npy')
+     ob_pts = 20* np.load('obstacle1.npy')
+     pts = np.vstack((pts, pts[0]))  #boundary points with first point repeated
+     base_domain = IEM_anyshape(pts, 'mixed', start = start, goal = goal)
+     obstacle_domains = []
+     obstacle_domains.append(IEM_anyshape(np.vstack((ob_pts, ob_pts[0])), 'dirichlet', other = base_domain, use_Greens = True))
+     success, pathlength = runtest(base_domain, obstacle_domains, base_domain.start, base_domain.goal)
+     return 
+ 
+def test_room_five():
+     '''this domain has divide by zero problems likely from sharp edges'''
+     print('Running test on Zaids star ...')
+     #ipdb.set_trace()
+     start = np.array([5,3])
+     #goal = np.array([11,6])
+     goal = np.array([14,12])
+     pts = 20* np.load('room5.npy')
+     ob_pts = 20* np.load('obstacle1.npy')
+     ob_pts[:,1] -= 5
+     pts = np.vstack((pts, pts[0]))  #boundary points with first point repeated
+     base_domain = IEM_anyshape(pts, 'mixed', start = start, goal = goal)
+     ipdb.set_trace()
+     obstacle_domains = []
+     obstacle_domains.append(IEM_anyshape(np.vstack((ob_pts, ob_pts[0])), 'dirichlet', other = base_domain, use_Greens = True))
+     success, pathlength = runtest(base_domain, obstacle_domains, base_domain.start, base_domain.goal)
+     return 
+     
 ##################################### MAIN ####################################
 
 if __name__=="__main__":
@@ -422,10 +501,16 @@ if __name__=="__main__":
   #test_IEM_threeCircle_static()
   #test_IEM_threeCircle_Greens()
   #test_IEM_threeCircle_Greens_shifted()
-  test_IEM_threeCircle_Greens_shifted_shape()
+  #test_IEM_threeCircle_Greens_shifted_shape()
   #test_IEM_manyCircle_Greens()
   #test_IEM_mazeCircle_Greens()
   #plt.show(block=False)
+
+  #test_room_one()
+  #test_room_two()
+  #test_room_three()
+  #test_room_four()
+  test_room_five()
 
   #Plot trajectory
   
