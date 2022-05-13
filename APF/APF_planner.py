@@ -15,12 +15,20 @@ import ipdb
 import cprofiler
 from meshEllipse import *
 #from IEM_ellipse import *
-from IEM_anyshape2_vector import *
+#from IEM_anyshape2_vector import *
+from IEM_anyshape2_vector_allpulse import *
 
 ##################### FUNCTIONS #############################################################
     
 def is_near_goal(p, goal, step):
     return la.norm(p - goal) <= step
+
+def get_angle(vector_1, vector_2):
+    unit_vector_1 = vector_1 / np.linalg.norm(vector_1)
+    unit_vector_2 = vector_2 / np.linalg.norm(vector_2)   
+    dot_product = np.dot(unit_vector_1, unit_vector_2) 
+    return np.arccos(dot_product)
+    
 
 def generate_random_movement(obstacles, max_step, center, radii):
     for ob in obstacles:
@@ -113,7 +121,7 @@ def APF_planner(base_domain, obstacle_domains):
     flag = 0
     
     step_size = 0.5
-    obstacle_threshold = 0.4
+    obstacle_threshold = 0.2
     direction_vectors = []
     direction_vectors.append(np.array([np.sqrt(1/2), np.sqrt(1/2)]) ) #take first step out of start 
     trajectory = [base_domain.start]
@@ -304,8 +312,13 @@ def precompute_boundary(base_d, obstacle_ds):
     Base domain potential field
     Greens function due to the boundary
     '''
+    print('Precomputing Greens ...')
     base_d.calculate_potential_field()
     g_densities, dg_densities = base_d.calculate_greens_densities()
+    if isinstance(obstacle_ds, list):
+        pass
+    else:
+        obstacle_ds = [obstacle_ds]
     for obstacle in obstacle_ds:
         obstacle.dg_on_bounds = dg_densities
         obstacle.g_on_bounds = g_densities
@@ -318,13 +331,15 @@ def APF_planner4(base_domain, obstacle_domains):
     It is a stationary environment algorithm.
     '''
     flag = 0   
-    step_size = 0.5
-    obstacle_threshold = 0.6
+    step_size = 0.2
+    U_threshold = 0.8
+    no_path = False
     direction_vectors = []
     direction_vectors.append(np.array([np.sqrt(1/2), np.sqrt(1/2)]) ) #take first step out of start 
     trajectory = [base_domain.start]
     trajectory.append(trajectory[-1] + np.array([step_size, step_size]) ) #take first step out of start
     for obstacle in obstacle_domains:
+        print('Computing obstacle field ...')
         obstacle.calculate_potential_field()
     
     print('Finding path ....')
@@ -336,18 +351,24 @@ def APF_planner4(base_domain, obstacle_domains):
         #ipdb.set_trace()
         for ob in obstacle_domains:
             U_obstacle = ob.Ufield(trajectory[-1])
-            if U_obstacle > obstacle_threshold:
+            if U_obstacle > U_threshold:
+              
                 print('Initiate wall-following')
+                walltrajectory = [trajectory[-1]]
                 Uin = U_base
                 direction_check = True #check direction of wall following first
+                angle = 0
+                E_perp_list = []
                 while True:
-                    E_obstacle = ob.Efield(trajectory[-1])
+                    E_obstacle = ob.Efield(walltrajectory[-1])
                     Eobstacle_normalized = E_obstacle/la.norm(E_obstacle)
                     if U_base < Uin:
                         if np.dot(E_obstacle, E_base) >= 0:
+                            trajectory = trajectory + walltrajectory[1:]
                             break
                         
                     E_perp = np.array([-Eobstacle_normalized[1], Eobstacle_normalized[0]])
+                    E_perp_list.append(E_perp)
                     if direction_check:
                         if np.dot(E_perp, E_base) >= 0:
                             direction = +1
@@ -355,32 +376,110 @@ def APF_planner4(base_domain, obstacle_domains):
                             direction = -1
                         direction_check = False 
                     E_perp = direction * E_perp
-                    trajectory.append( trajectory[-1] + step_size * E_perp ) 
-                   # print(trajectory[-1])
-              
+                    walltrajectory.append( walltrajectory[-1] + step_size * E_perp ) 
+                    if ~is_inside_polygon2(base_domain.co_points, walltrajectory[-1][None,:], r = -0.1 ): #check if you took the wrong way around the obstacle
+                        wall_trajectory = [trajectory[-1]]
+                        direction *= -1
+                    # Circle the obstacle and return done
+                    #ipdb.set_trace()
+                    angle += get_angle(E_perp_list[-1], E_perp_list[-2]) if len(E_perp_list)>1 else 0
+                    if angle > 2*pi:
+                        trajectory = trajectory + walltrajectory[1:]
+                        no_path = True
+                        break
+                  #  ipdb.set_trace()
                     for other_ob in obstacle_domains: #check for intersection with other obstacles
                         if other_ob == ob:
                             continue
-                        if other_ob.Ufield(trajectory[-1]) > obstacle_threshold:
-                            #ipdb.set_trace()
+                        if other_ob.Ufield(walltrajectory[-1]) > max(ob.Ufield(walltrajectory[-1]), U_threshold):
                             ob = other_ob
                                               
-                    U_base = base_domain.Ufield(trajectory[-1])
-                    E_base = base_domain.Efield(trajectory[-1])
+                    U_base = base_domain.Ufield(walltrajectory[-1])
+                    E_base = base_domain.Efield(walltrajectory[-1])
                     Ebase_normalized = E_base/la.norm(E_base)
-                    #print(trajectory[-1])
-                    flag +=1
-                    if flag > 100:
-                        print('Failure')
-                        break
-
+                        
         trajectory.append( trajectory[-1] + step_size * Ebase_normalized ) 
        # print(trajectory[-1])
         #ipdb.set_trace()
         #debugging
         flag +=1
-        if flag > 100:
-            print('Failure')
+        if no_path == True:
+            print('No path exists')
+            break
+        if trajectory[-1].any() > 20 or trajectory[-1].any() < 0:
+            print('Error: Trajectory out of bounds')
+            break
+       # print(trajectory[-1])
+    return trajectory  
+    
+
+def APF_planner5(base_domain, obstacle_domain):    
+    ''' This planner samples the boundary Green's function for use in obstacle domain calculations.
+    It is a stationary environment algorithm. There is just one obstacle domain
+    '''
+    flag = 0   
+    step_size = 0.2
+    U_threshold = 0.8
+    no_path = False
+    direction_vectors = []
+    direction_vectors.append(np.array([np.sqrt(1/2), np.sqrt(1/2)]) ) #take first step out of start 
+    trajectory = [base_domain.start]
+    trajectory.append(trajectory[-1] + np.array([step_size, step_size]) ) #take first step out of start
+    print('Computing obstacle field ...')
+    obstacle_domain.calculate_potential_field()
+    
+    print('Finding path ....')
+    while not is_near_goal(trajectory[-1], base_domain.goal, step_size):
+        U_base = base_domain.Ufield(trajectory[-1])
+        E_base = base_domain.Efield(trajectory[-1])
+        Ebase_normalized = E_base/la.norm(E_base)
+        U_obstacle = obstacle_domain.Ufield(trajectory[-1])
+        
+        if U_obstacle > U_threshold:
+            print('Initiate wall-following')
+            walltrajectory = [trajectory[-1]]
+            Uin = U_base
+            direction_check = True #check direction of wall following first
+            angle = 0
+            E_perp_list = []
+            while True:
+                E_obstacle = obstacle_domain.Efield(walltrajectory[-1])
+                Eobstacle_normalized = E_obstacle/la.norm(E_obstacle)
+                if U_base < Uin:
+                    if np.dot(E_obstacle, E_base) >= 0:
+                        trajectory = trajectory + walltrajectory[1:]
+                        break
+            
+                E_perp = np.array([-Eobstacle_normalized[1], Eobstacle_normalized[0]])
+                E_perp_list.append(E_perp)
+                if direction_check:
+                    if np.dot(E_perp, E_base) >= 0:
+                        direction = +1
+                    else:
+                        direction = -1
+                    direction_check = False 
+                E_perp = direction * E_perp
+                walltrajectory.append( walltrajectory[-1] + step_size * E_perp ) 
+                if ~is_inside_polygon2(base_domain.co_points, walltrajectory[-1][None,:], r = -0.1 ): #check if you took the wrong way around the obstacle
+                    wall_trajectory = [trajectory[-1]]
+                    direction *= -1
+                # Circle the obstacle and return done
+                #ipdb.set_trace()
+                angle += get_angle(E_perp_list[-1], E_perp_list[-2]) if len(E_perp_list)>1 else 0
+                if angle > 2*pi:
+                    trajectory = trajectory + walltrajectory[1:]
+                    no_path = True
+                    break
+                                          
+                U_base = base_domain.Ufield(walltrajectory[-1])
+                E_base = base_domain.Efield(walltrajectory[-1])
+                Ebase_normalized = E_base/la.norm(E_base)
+                    
+        trajectory.append( trajectory[-1] + step_size * Ebase_normalized ) 
+        #debugging
+        flag +=1
+        if no_path == True:
+            print('No path exists')
             break
         if trajectory[-1].any() > 20 or trajectory[-1].any() < 0:
             print('Error: Trajectory out of bounds')

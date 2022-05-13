@@ -15,7 +15,8 @@ from matplotlib.patches import Ellipse
 import ipdb
 from FEM_domain import FEM_domain
 #from IEM_ellipse import IEM_ellipse
-from IEM_anyshape2_vector import *
+#from IEM_anyshape2_vector import *
+from IEM_anyshape2_vector_allpulse import *
 from APF_planner import *
 import imageio
 import os
@@ -159,6 +160,7 @@ def runtest(base_domain, obstacle_domains, start, goal, verbose = True, motion =
   
   # Call the motion planner
   precompute_boundary(base_domain, obstacle_domains)
+  #ipdb.set_trace()
   t0 = tic()
   path = APF_planner4(base_domain, obstacle_domains)
   toc(t0,"Planning")
@@ -185,9 +187,13 @@ def runtest(base_domain, obstacle_domains, start, goal, verbose = True, motion =
       ax.spines['left'].set_visible(False)
       boundary_points = base_domain.get_boundary_points()
       ax.plot(boundary_points[:,0], boundary_points[:,1])
-      for ob in obstacle_domains:   #for planner1 and 2
-          boundary_points = ob.get_boundary_points()
-          ax.plot(boundary_points[:,0], boundary_points[:,1], color = 'r')
+      if isinstance( obstacle_domains, list ):
+          for ob in obstacle_domains:   #for planner1 and 2
+              boundary_points = ob.get_boundary_points()
+              ax.plot(boundary_points[:,0], boundary_points[:,1], color = 'r')
+      else:
+          for pts in obstacle_domains.ob_co_points: #for planner 
+              ax.plot(pts[:,0], pts[:,1], color = 'r')
 # =============================================================================
 #       for ob in obstacle_domains: #for planner 3
 #           ellipse = Ellipse(ob[0], 2*ob[1][0], 2*ob[1][1], color='thistle')
@@ -333,6 +339,8 @@ def test_IEM_threeCircle_static():
      success, pathlength = runtest(base_domain, obstacles, base_domain.start, base_domain.goal)
      return  
  
+
+ 
 def test_IEM_threeCircle_Greens():
      print('Running test on triple circle...\n')
      start = np.array([-5,-5])
@@ -370,9 +378,9 @@ def test_IEM_threeCircle_Greens_shifted_shape():
      pts = get_ellipse(30+1, center, radii)
      base_domain = IEM_anyshape(pts, 'mixed', start = start, goal = goal)
      obstacle_domains = []
-     obstacle_domains.append(IEM_anyshape(get_ellipse(15, np.array([10.1,10.1]), np.array([3,3])), 'dirichlet', other = base_domain, use_Greens = True))
-     obstacle_domains.append(IEM_anyshape(get_ellipse(15, np.array([12.5,5]), np.array([2,2])), 'dirichlet', other = base_domain, use_Greens = True))
-     obstacle_domains.append(IEM_anyshape(get_ellipse(15, np.array([6.5,15]), np.array([2.5, 2])), 'dirichlet', other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_anyshape(get_ellipse(15, np.array([10.1,10.1]), np.array([2.5,2.5])), 'dirichlet', other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_anyshape(get_ellipse(15, np.array([12.5,4]), np.array([3,1.5])), 'dirichlet', other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_anyshape(get_ellipse(15, np.array([6.5,13]), np.array([2.5, 2])), 'dirichlet', other = base_domain, use_Greens = True))
      success, pathlength = runtest(base_domain, obstacle_domains, base_domain.start, base_domain.goal)
      return 
  
@@ -416,13 +424,25 @@ def test_room_one():
      #ipdb.set_trace()
      start = np.array([5.0,5.0])
      goal = np.array([15.5,15])
-     pts = 20* np.load('room1.npy')
+     #goal = np.array([17.5,15])
+     pts = 20* np.load('room1_finer.npy')
      pts = np.vstack((pts, pts[0]))  #boundary points with first point repeated
      base_domain = IEM_anyshape(pts, 'mixed', start = start, goal = goal)
      obstacle_domains = []
-     obstacle_domains.append(IEM_anyshape(get_ellipse(15, np.array([10.1,10.1]), np.array([3,3])), 'dirichlet', other = base_domain, use_Greens = True))
-     obstacle_domains.append(IEM_anyshape(get_ellipse(15, np.array([12.5,5]), np.array([2,2])), 'dirichlet', other = base_domain, use_Greens = True))
-     obstacle_domains.append(IEM_anyshape(get_ellipse(15, np.array([6.5,13.5]), np.array([2, 2])), 'dirichlet', other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_anyshape(get_ellipse(15, np.array([10.1,10.1]), np.array([1,1])), 'dirichlet', other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_anyshape(get_ellipse(15, np.array([12.5,5]), np.array([1,1])), 'dirichlet', other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_anyshape(get_ellipse(15, np.array([6.5,13.5]), np.array([1, 1])), 'dirichlet', other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_anyshape(get_ellipse(15, np.array([15,6]), np.array([1,1])), 'dirichlet', other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_anyshape(get_ellipse(15, np.array([10,13]), np.array([1,1])), 'dirichlet', other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_anyshape(get_ellipse(15, np.array([2,6]), np.array([1, 1])), 'dirichlet', other = base_domain, use_Greens = True))
+     
+     obstacle_domains.append(IEM_anyshape(get_ellipse(15, np.array([12.5,13]), np.array([1,1])), 'dirichlet', other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_anyshape(get_ellipse(15, np.array([5,7.5]), np.array([1,1])), 'dirichlet', other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_anyshape(get_ellipse(15, np.array([8,5]), np.array([1, 1])), 'dirichlet', other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_anyshape(get_ellipse(15, np.array([7.5,16]), np.array([1,1])), 'dirichlet', other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_anyshape(get_ellipse(15, np.array([15.5,15]), np.array([1,1])), 'dirichlet', other = base_domain, use_Greens = True))
+     obstacle_domains.append(IEM_anyshape(get_ellipse(15, np.array([14,7.5]), np.array([1, 1])), 'dirichlet', other = base_domain, use_Greens = True))
+     
      success, pathlength = runtest(base_domain, obstacle_domains, base_domain.start, base_domain.goal)
      return 
  
@@ -473,7 +493,7 @@ def test_room_four():
      return 
  
 def test_room_five():
-     '''this domain has divide by zero problems likely from sharp edges'''
+     '''Nope. this domain has divide by zero problems likely from sharp edges'''
      print('Running test on Zaids star ...')
      #ipdb.set_trace()
      start = np.array([5,3])
@@ -484,12 +504,89 @@ def test_room_five():
      ob_pts[:,1] -= 5
      pts = np.vstack((pts, pts[0]))  #boundary points with first point repeated
      base_domain = IEM_anyshape(pts, 'mixed', start = start, goal = goal)
-     ipdb.set_trace()
+     #ipdb.set_trace()
      obstacle_domains = []
      obstacle_domains.append(IEM_anyshape(np.vstack((ob_pts, ob_pts[0])), 'dirichlet', other = base_domain, use_Greens = True))
      success, pathlength = runtest(base_domain, obstacle_domains, base_domain.start, base_domain.goal)
      return 
-     
+ 
+def test_room_six():
+     '''this domain is great'''
+     print('Running test on Zaids star ...')
+     #ipdb.set_trace()
+     start = np.array([5,3])
+     #goal = np.array([11,6])
+     goal = np.array([14,12])
+     pts = 20* np.load('room6.npy')
+     ob_pts = 20* np.load('obstacle1.npy'); ob_2_pts =  20* np.load('obstacle16_10.npy')
+     pts = np.vstack((pts, pts[0]))  #boundary points with first point repeated
+     base_domain = IEM_anyshape(pts, 'mixed', start = start, goal = goal)
+     obstacle_domains = []
+     obstacle_domains.append(IEM_anyshape(np.vstack((ob_pts, ob_pts[0])), 'dirichlet', other = base_domain, use_Greens = True))
+     ob_pts[:,1] = ob_pts[:,1]*0.8 - 2
+     #obstacle_domains.append(IEM_anyshape(np.vstack((ob_pts, ob_pts[0])), 'dirichlet', other = base_domain, use_Greens = True))
+     #obstacle_domains.append(IEM_anyshape(np.vstack((ob_2_pts, ob_2_pts[0])), 'dirichlet', other = base_domain, use_Greens = True))
+     success, pathlength = runtest(base_domain, obstacle_domains, base_domain.start, base_domain.goal)
+     return 
+ 
+def test_one_obstacle_domain():
+     '''this domain is great'''
+     print('Running test on Zaids star ...')
+     #ipdb.set_trace()
+     start = np.array([5,3])
+     #goal = np.array([11,6])
+     goal = np.array([14,12])
+     pts = 20* np.load('room6.npy')
+     ob_pts = 20* np.load('obstacle1.npy'); ob_2_pts =  20* np.load('obstacle16_10.npy')
+     pts = np.vstack((pts, pts[0]))  #boundary points with first point repeated
+     base_domain = IEM_anyshape(pts, 'mixed', start = start, goal = goal)
+     obstacles = []
+     obstacles.append(np.vstack((ob_pts, ob_pts[0])))
+     ob_pts[:,1] = ob_pts[:,1]*0.8 - 2
+     #obstacles.append(np.vstack((ob_pts, ob_pts[0])))
+     #obstacles.append(np.vstack((ob_2_pts, ob_2_pts[0])))
+     obstacle_domain = IEM_anyshape( ob_list = obstacles, boundary_type = 'dirichlet', other = base_domain, use_Greens = True)
+     success, pathlength = runtest(base_domain, obstacle_domain,  base_domain.start, base_domain.goal)
+     return 
+ 
+def test_square():
+     '''this domain has divide by zero problems likely from sharp edges'''
+     print('Running test on Maze ...')
+     #ipdb.set_trace()
+     start = np.array([4,4])
+     #goal = np.array([11,6])
+     goal = np.array([16,15.5])
+     pts = 20* np.load('square.npy')
+     ob_pts1 = 20* np.load('obstacle_bar8.npy'); ob_pts2 = 20* np.load('obstacle_bar4.npy'); ob_pts3 = 20* np.load('obstacle_bar6.npy')
+     ob_pts1[:,1]/=2
+     pts = np.vstack((pts, pts[0]))  #boundary points with first point repeated
+     base_domain = IEM_anyshape(pts, 'mixed', start = start, goal = goal)
+     obstacle_domains = []
+     #obstacle_domains.append(IEM_anyshape(np.vstack((ob_pts2, ob_pts2[0])), 'dirichlet', other = base_domain, use_Greens = True))#good too close to edge
+     #obstacle_domains.append(IEM_anyshape(np.vstack((ob_pts3, ob_pts3[0])), 'dirichlet', other = base_domain, use_Greens = True)) #good 
+     #obstacle_domains.append(IEM_anyshape(np.vstack((ob_pts1, ob_pts1[0])), 'dirichlet', other = base_domain, use_Greens = True)) #good
+     success, pathlength = runtest(base_domain, obstacle_domains, base_domain.start, base_domain.goal)
+     return 
+ 
+def test_maze():
+     '''this domain has divide by zero problems likely from sharp edges'''
+     print('Running test on Maze ...')
+     #ipdb.set_trace()
+     start = np.array([2.5,5])
+     #goal = np.array([11,6])
+     goal = np.array([16,15.5])
+     pts = 20* np.load('maze.npy')
+     ob_pts1 = 20* np.load('obstacle_bar8.npy'); ob_pts2 = 20* np.load('obstacle_bar4.npy'); ob_pts3 = 20* np.load('obstacle_bar6.npy')
+     ob_pts1[:,1]/=2
+     pts = np.vstack((pts, pts[0]))  #boundary points with first point repeated
+     base_domain = IEM_anyshape(pts, 'mixed', start = start, goal = goal)
+     obstacle_domains = []
+     #obstacle_domains.append(IEM_anyshape(np.vstack((ob_pts2, ob_pts2[0])), 'dirichlet', other = base_domain, use_Greens = True))#good too close to edge
+     #obstacle_domains.append(IEM_anyshape(np.vstack((ob_pts3, ob_pts3[0])), 'dirichlet', other = base_domain, use_Greens = True)) #good 
+     #obstacle_domains.append(IEM_anyshape(np.vstack((ob_pts1, ob_pts1[0])), 'dirichlet', other = base_domain, use_Greens = True)) #good
+     success, pathlength = runtest(base_domain, obstacle_domains, base_domain.start, base_domain.goal)
+     return 
+ 
 ##################################### MAIN ####################################
 
 if __name__=="__main__":
@@ -509,11 +606,15 @@ if __name__=="__main__":
   #test_room_one()
   #test_room_two()
   #test_room_three()
-  #test_room_four()
-  test_room_five()
+  test_room_six()
+  #test_maze()
+  #test_square()
+  
+  #test_room_five()
 
   #Plot trajectory
   
+  #test_one_obstacle_domain()
 
 
 

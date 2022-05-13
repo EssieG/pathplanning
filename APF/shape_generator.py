@@ -20,6 +20,6 @@ plt.show()
 
 # select point
 yroi = plt.ginput(0,0)
-np.save('room5.npy', np.array(yroi))
-#np.save('obstacle1.npy', np.array(yroi))
+np.save('room1_finer.npy', np.array(yroi))
+#np.save('obstacle_bar8.npy', np.array(yroi))
 

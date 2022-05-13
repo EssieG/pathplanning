@@ -1,12 +1,20 @@
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Created on Fri Feb 11 12:41:25 2022
 
-This is a class for storing the parameters of an integral equations object.
+This is a class for calculating and storing the parameters of an integral equations object.
+There are four path planners that can be implemented using this class:
+    1) base and obstacles are all included in one domain.
+    2) base and obstacles are in two separate domains with greens used for boundary in obstacle domain.
+    3) base and each obstacle are in separate domains.
+    4) base and each obstacle are in separate domains with greens used for boundary in obstacle domain.
+    5) base and obstacle are in separate domains without any boundary used for obstacle domains.
 
-@author: ubuntu
+@author: esther
 """
+
 import numpy as np
 import scipy.integrate
 import numpy.linalg as la
@@ -22,53 +30,50 @@ import ipdb
 
 
 class IEM_anyshape:
-  def __init__(self, points, boundary_type, start = None, goal = None, other = None, use_Greens = False, ob_list = []):
-    ''' let boundary be another object of IEM_ellipse (base_domain)
-    ob_list is a list of (center, radii) tuples
-    points - Nx2 numpy array of collocation points
-    start - 1x2
-    goal - 1x2
+    
+  def __init__(self, boundary = None, obstacle_list = [], startPoint = None, goalPoint = None, use_Greens = False):
+    ''' 
+    boundary - tuple - (collocation points, type = 'dirichlet' or 'neumann')
+    start - list or np.array - [x, y]
+    goal - list or np.array - [x, y]
     use_Greens - indicate whether or not to use Greens to model the base domain
-    other - indcate whether 
     '''
     self.movements = []   
-    self.boundary_type = boundary_type  #dirichlet, neumann, mixed
-    self.co_points = points
-    self.points = self.ellipse_knots(self.co_points) #loc of points (p)
-    self.N_points = len(self.points)                 #number of discretized points
-    self.start = start
-    self.goal = goal
-    self.other = False
-    if start is not None:  
-        self.N_startgoal_points = 15  #check normals
+    self.start = startPoint
+    self.goal = goalPoint
+    self.use_Greens = use_Greens
+    self.u_on_bounds, self.gam_on_bounds = None, None
+    self.is_base_domain = startPoint is not None
+    if boundary is not None:
+        self.co_points = boundary[0]
+        self.type = boundary[1]
+        self.points = self.ellipse_knots(boundary[0])
+        self.N_points = len(self.points)
+    self.N_obstacles = len(obstacle_list)
+    if obstacle_list:   
+        self.ob_co_points = []
+        self.ob_points = [] 
+        self.N_ob_points = []
+        self.ob_type = []
+    for ob in obstacle_list:
+        self.ob_co_points.append(ob[0])
+        self.ob_points.append(self.ellipse_knots(ob[0])) 
+        self.N_ob_points.append(len(ob[0])-1)  
+        self.ob_type.append(ob[1])
+    if startPoint is not None: 
+        self.N_startgoal_points = 15  
         self.startgoal_radii = [0.1, 0.1]
         self.start_co_points = get_ellipse(self.N_startgoal_points+1, self.start, self.startgoal_radii)
         self.goal_co_points = get_ellipse(self.N_startgoal_points+1, self.goal, self.startgoal_radii)
         self.start_points = self.ellipse_knots(self.start_co_points)
         self.goal_points = self.ellipse_knots(self.goal_co_points) 
-        self.ob_co_points = []
-        self.ob_co_points_t = []
-        self.ob_points = []
-        self.N_ob_points = [0]
-        for i in range(len(ob_list)):
-            self.N_ob_points.pop()
-            self.ob_co_points.append(ob_list[i])
-            self.ob_points.append(self.ellipse_knots(self.ob_co_points[i])) 
-            self.N_ob_points.append(len(self.ob_points[i]))
-    self.u_on_bounds, self.gam_on_bounds = None, None
-    if other is not None:
-        self.other = True
-        self.use_Greens = use_Greens
-        self.N_bound_points = other.N_points
-        self.bound_co_points = other.co_points
-        self.bound_points = other.points
+        
     
   def __eq__(self, other):
       #as long as one point on the obstacle is equal, its the same obstacle.
       #assumes non-overlapping obstacles
       return (self.co_points[0] == other.co_points[0]).all()
 
- 
     
   def get_boundary_points(self):
     return self.co_points
@@ -80,22 +85,47 @@ class IEM_anyshape:
     return x
 
 
+  def find_normal_2D(self, q1, q2):
+    '''it is assumed that q1,q2 goes counterclockwise around the boundary, 
+    vectorized
+    '''
+    if len(q1.shape) == 1:
+        q1 = q1.reshape((1,2))
+        q2 = q2.reshape((1,2))
+    dx = q2[:,0] - q1[:,0] 
+    dy = q2[:,1] - q1[:,1]
+    vectors = np.vstack((dy, -dx)).T
+    normals = vectors/np.linalg.norm(vectors, axis=1)[:,None]
+    #(-dy, dx) is the other, inward facing, normal
+    return normals
+
+
   def greens(self, p, p2):
     ''' returns the Greens function at a point, p != p2 
     '''
-    Greens = -1/(2*pi) * ln(sqrt((p[0]-p2[0])**2+(p[1]-p2[1])**2))
+    if len(p.shape) == 1:
+       p = p.reshape((1,2))
+       p2 = p2.reshape((1,2))
+    Greens = -1/(2*pi) * ln(sqrt((p[:,0]-p2[:,0])**2+(p[:,1]-p2[:,1])**2))
     return Greens
+
 
   def Dgreens(self, p, p2, q1, q2):
     ''' returns the derivative of Greens function at a point, p != p2
     derivative is wrt p2
     '''
-    exterior_normal = self.find_normal(q1,q2)
-    DGreens = 1/(2*pi)/((p[1]-p2[1])**2+(p[0]-p2[0])**2)*((p[0]-p2[0])*exterior_normal[0] + (p[1]-p2[1])*exterior_normal[1]) 
+    if len(p.shape) == 1:
+       p = p.reshape((1,2))
+       p2 = p2.reshape((1,2))
+    exterior_normal = self.find_normal_2D(q1,q2)
+    DGreens = 1/(2*pi)/((p[:,1]-p2[:,1])**2+(p[:,0]-p2[:,0])**2)*((p[:,0]-p2[:,0])*exterior_normal[:,0] + (p[:,1]-p2[:,1])*exterior_normal[:,1]) 
     return DGreens
 
 
-  def intgreens(self, p, b1, b2, is_self = False):
+################################### Integration functions #####################
+
+
+  def intgreens(self, p, b1, b2, is_self = False): 
       '''returns the greens function integrated over a curve, estimated as a linear segment.
          p is the point where the impulse is. b1 and b2 are the boundaries of the curve being integrated over.
          The analytical expression for this integral over the line segment connecting two boundary points.
@@ -178,29 +208,6 @@ class IEM_anyshape:
     return Gint
 
 
-  def find_normal(self, q1, q2):
-    if abs(q2[1] - q1[1]) <= 0.00001:
-        normal = np.array([0,1])
-    else:
-        m = -(q2[0]-q1[0])/(q2[1]-q1[1])
-        normal_temp = np.array([1, m])
-        normal = normal_temp/np.linalg.norm(normal_temp)
-    if q2[1] < q1[1]:
-        normal *= -1
-    return normal
-
-  def find_normal_2D(self, q1, q2):
-      '''it is assumed that q1,q2 goes counterclockwise around the boundary, 
-      vectorized
-      '''
-      dx = q2[:,0] - q1[:,0] 
-      dy = q2[:,1] - q1[:,1]
-      vectors = np.vstack((dy, -dx)).T
-      #ipdb.set_trace()
-      normals = vectors/np.linalg.norm(vectors, axis=1)[:,None]
-      #(-dy, dx) is the other, inward facing, normal
-      return normals
-
   def intDgreens_quad(self, p, b1,b2, is_selfterm = False):
     '''Input is reference point p and the segment points to integrate derivative Greens function over. Output is 
     integral of grad Green's potential at point p
@@ -208,7 +215,7 @@ class IEM_anyshape:
     y = b1[1] + t* (b2[1]-b1[1])
     '''
     t1 = 0; t2 = 1
-    exterior_normal = self.find_normal(b1,b2)
+    exterior_normal = self.find_normal_2D(b1,b2)
     DGreens = lambda t : 1/(2*pi)/((p[1] - (b1[1] + t* (b2[1]-b1[1])))**2+(p[0] - (b1[0]+ t* (b2[0]-b1[0])))**2)*((p[0]-(b1[0]+ t* (b2[0]-b1[0])))*exterior_normal[0] + (p[1]-(b1[1] + t* (b2[1]-b1[1])))*exterior_normal[1]) * sqrt((b2[0]-b1[0])**2+ (b2[1]-b1[1])**2)
     if is_selfterm:
         t_mid = (t1+t2)/2
@@ -216,6 +223,7 @@ class IEM_anyshape:
     else:
         DGint = scipy.integrate.quad(DGreens, t1, t2, epsabs = 1.4*10**12)[0] 
     return DGint
+
 
  # import warnings
  # warnings.filterwarnings('error')
@@ -226,7 +234,7 @@ class IEM_anyshape:
         DOESNT WORK FOR SELF TERMS - acoording to wolfram alpha, self terms do not converge.... principal value?
         integral((p - (x + t (c - x))) n + (q - (y + t (u - y))) m)/((2 π) ((q - (y + t (u - y)))^2 + (p - (x + t (c - x)))^2)) dt = ((-c n + m (y - u) + n x) log(t^2 (c^2 - 2 c x + u^2 - 2 u y + x^2 + y^2) - 2 t (c (p - x) - p x + q (u - y) - u y + x^2 + y^2) + p^2 - 2 p x + q^2 - 2 q y + x^2 + y^2) + 2 (c m - m x + n (y - u)) tan^(-1)((c^2 t + c (-p - 2 t x + x) + p x + q (y - u) + t u^2 - 2 t u y + t x^2 + t y^2 + u y - x^2 - y^2)/(c (q - y) + p (y - u) + x (u - q))))/(4 π (c^2 - 2 c x + u^2 - 2 u y + x^2 + y^2))
     '''
-    exterior_normal = self.find_normal(b1,b2)
+    exterior_normal = self.find_normal_2D(b1,b2)
     #integrate from t = 0 to t= 1
     if is_selfterm:  #point at center of segment
         #Cauchy integral value, t = 0 to t= 0.5, function is antisymmetric, self terms go to zero
@@ -281,7 +289,7 @@ class IEM_anyshape:
         DOESNT WORK FOR SELF TERMS - acoording to wolfram alpha, self terms do not converge.... principal value?
         integral((p - (x + t (c - x))) n + (q - (y + t (u - y))) m)/((2 π) ((q - (y + t (u - y)))^2 + (p - (x + t (c - x)))^2)) dt = ((-c n + m (y - u) + n x) log(t^2 (c^2 - 2 c x + u^2 - 2 u y + x^2 + y^2) - 2 t (c (p - x) - p x + q (u - y) - u y + x^2 + y^2) + p^2 - 2 p x + q^2 - 2 q y + x^2 + y^2) + 2 (c m - m x + n (y - u)) tan^(-1)((c^2 t + c (-p - 2 t x + x) + p x + q (y - u) + t u^2 - 2 t u y + t x^2 + t y^2 + u y - x^2 - y^2)/(c (q - y) + p (y - u) + x (u - q))))/(4 π (c^2 - 2 c x + u^2 - 2 u y + x^2 + y^2))
     '''
-    exterior_normal = self.find_normal(b1,b2)
+    exterior_normal = self.find_normal_2D(b1,b2)[0]
     #integrate from t = 0 to t= 1
     if is_selfterm:  #point at center of segment
         #Cauchy integral value, t = 0 to t= 0.5, function is antisymmetric, self terms go to zero
@@ -339,30 +347,32 @@ class IEM_anyshape:
     integral *= sqrt((b2[:,0]-b1[:,0])**2 + (b2[:,1]-b1[:,1])**2)
     return integral
     
-    
-  def calculate_potential_field(self):
-    '''calculate the densities u and du/dn'''    
-    if self.start is not None:
-        N_obstacles = len(self.ob_points)
-        N_total = self.N_points + 2 * self.N_startgoal_points + sum(self.N_ob_points)*N_obstacles
+
+############################### OTHER MEMBER FUNCTIONS ########################
+
+
+  def calculate_densities(self):
+    '''calculate the densities u and du/dn at all points
+    '''    
+    if self.is_base_domain:
+        N_ob_pts = sum(self.N_ob_points)
+        N_total = self.N_points + 2 * self.N_startgoal_points + N_ob_pts
         p_all = np.vstack((self.points, self.start_points, self.goal_points))
-        for ob in range(N_obstacles):
-            p_all = np.vstack((p_all, self.ob_points[ob]))
+        for i in range(self.N_obstacles):
+            p_all = np.vstack((p_all, self.ob_points[i]))
         
-        # Set up boundary conditions for collocation
+        # Set up boundary conditions
         c_Q = np.full(N_total,1/2) 
         u_Q = np.ones(N_total)          #start potential is 1 and environment potential is unknown and obstacle potential is 1
-        u_Q[N_total-self.N_ob_points[0]*N_obstacles-2*self.N_startgoal_points:N_total-self.N_ob_points[0]*N_obstacles-self.N_startgoal_points] = 1.1 
-        u_Q[N_total-self.N_ob_points[0]*N_obstacles-self.N_startgoal_points:N_total-self.N_ob_points[0]*N_obstacles] = 0   #goal potential
+        u_Q[N_total - N_ob_pts - 2*self.N_startgoal_points : N_total - N_ob_pts - self.N_startgoal_points] = 1.1 
+        u_Q[N_total - N_ob_pts - self.N_startgoal_points : N_total - N_ob_pts] = 0   #goal potential
         gam_Q = np.zeros(N_total)       #environment normal derivative is 0
         gam_Q[self.N_points : ] = 1     #unknown normal derivative on start and goal and obstacles
         u_indices = np.arange(self.N_points, N_total)    #indices where we know u
         gam_indices = np.arange(0,self.N_points)         #indices where we know gam
         
-        #ipdb.set_trace()
         # Set up matrix A (unknowns) 
         A = np.zeros((N_total,N_total))
-        #ipdb.set_trace()
         for i in range(N_total):
             for k in range(self.N_points):   #when integrating over environment segment
                 is_self = True if i == k else False
@@ -375,10 +385,11 @@ class IEM_anyshape:
             for h in range(self.N_startgoal_points):    #integration over goal segment
                 is_self = True if i == self.N_points+self.N_startgoal_points+h else False
                 A[i,self.N_points+self.N_startgoal_points+h] = self.intgreens(p_all[i], self.goal_co_points[h], self.goal_co_points[h+1], is_self)
-            for o in range(N_obstacles):
-                for m in range(self.N_ob_points):    #integration over goal segment
-                    is_self = True if i == self.N_points+self.N_startgoal_points*2+self.N_ob_points*o+m else False
-                    A[i,self.N_points+self.N_startgoal_points*2+self.N_ob_points*o+m] = self.intgreens(p_all[i], self.ob_co_points[o][m], self.ob_co_points[o][m+1], is_self)
+            for o in range(self.N_obstacles):
+                Npts =self.N_ob_points[o]
+                for m in range(Npts):                   #integration over obstacles segment
+                    is_self = True if i == self.N_points + 2*self.N_startgoal_points + sum(self.N_ob_points[0:o]) + m else False
+                    A[i, self.N_points + 2*self.N_startgoal_points + sum(self.N_ob_points[0:o]) + m] = self.intgreens(p_all[i], self.ob_co_points[o][m], self.ob_co_points[o][m+1], is_self)
         
         # Set up matrix b (knowns)
         b = np.zeros(N_total)
@@ -396,99 +407,105 @@ class IEM_anyshape:
                 b[i] += u_Q[self.N_points + self.N_startgoal_points + h] * self.intDgreens(p_all[i], self.goal_co_points[h], self.goal_co_points[h+1], is_self)
                 if is_self:
                     b[i] += - u_Q[i]*c_Q[i]      
-            for o in range(N_obstacles):
-                for h in range(self.N_ob_points):    #integration over goal segment
-                    is_self = True if i == self.N_points + self.N_startgoal_points*2 + self.N_ob_points*o + h else False                
-                    b[i] += u_Q[self.N_points + self.N_startgoal_points*2 + self.N_ob_points*o + h] * self.intDgreens(p_all[i], self.ob_co_points[o][h], self.ob_co_points[o][h+1], is_self)
+            for o in range(self.N_obstacles):
+                Npts =self.N_ob_points[o]
+                for h in range(Npts):                   #integration over obstacles segment
+                    is_self = True if i == self.N_points + 2*self.N_startgoal_points + sum(self.N_ob_points[0:o]) + h else False             
+                    b[i] += u_Q[self.N_points + 2*self.N_startgoal_points + sum(self._ob_points[0:o]) + h] * self.intDgreens(p_all[i], self.ob_co_points[o][h], self.ob_co_points[o][h+1], is_self)
                     if is_self:
                         b[i] += - u_Q[i]*c_Q[i]
-                           
+
         # Solve matrix equation 
         coeff = la.solve(A,b) 
         gam_Q[u_indices] = coeff[u_indices]
         u_Q[gam_indices] = coeff[gam_indices]
-    
-    
-    elif self.other == True:
-        if self.use_Greens == True:
-            # Set up boundary conditions for collocation
-            N_total = self.N_points 
-            c_Q = np.full(N_total,1/2)
-            u_Q = np.ones(N_total)       #obstacles boundary set to 1
-            p_all = self.points
-            # Set up matrix A (unknowns)   
+     
+    else:
+        if self.use_Greens:
+            N_total = sum(self.N_ob_points)
+            c_Q = np.full(N_total, 1/2)
+            u_Q = np.ones(N_total)       
+            seg_lengths = []
+            for o in self.ob_co_points:   
+                seg_lengths.append(get_segment_length(o[:-1], o[1:]))
+            # Set up matrix A & b 
             A = np.zeros((N_total, N_total))
-            b = np.zeros(N_total)
-            b2 = np.zeros(N_total)
-            #ipdb.set_trace()
-            exterior_normal = self.find_normal_2D(self.co_points[:-1], self.co_points[1:])
-            
-            np.fill_diagonal(A, - self.intgreens_selfterms_vectorized(self.co_points[:-1], self.co_points[1:]))
-            for i in range(N_total):
-                not_self = np.ones(N_total, dtype=bool)
-                not_self[i] = 0
-                A[i,not_self] = - self.intgreens_vectorized(p_all[i], self.co_points[:-1][not_self], self.co_points[1:][not_self])
-                b[i] += np.sum(- u_Q[not_self]*self.intDgreens_vectorized(p_all[i], self.co_points[:-1][not_self], self.co_points[1:][not_self]))
-                for k in range(N_total): 
-                    is_self = True if i == k else False
-                    g_scatter, dg_gradient = self.Gfield(p_all[i], self.points[k])
-                    A[i,k] += - g_scatter * get_segment_length(self.co_points[k], self.co_points[k+1])
-                    # Set up matrix b (knowns)
-                    dg_scatter = np.dot(dg_gradient, exterior_normal[k])
-                    b[i] += - u_Q[k]*dg_scatter * get_segment_length(self.co_points[k], self.co_points[k+1]) 
-                    if is_self: 
-                        b[i] +=  u_Q[i]*c_Q[i]  
-            #ipdb.set_trace()
-                
+            b = np.zeros(N_total) 
+            idx2 = 0
+            for n in range(self.N_obstacles):
+                idx1 = idx2
+                idx2 += self.N_ob_points[n]
+                np.fill_diagonal(A[idx1:idx2, idx1:idx2], - self.intgreens_selfterms_vectorized(self.ob_co_points[n][:-1], self.ob_co_points[n][1:]))
+                idx4 = 0
+                for m in range(self.N_obstacles):
+                    idx3 = idx4
+                    idx4 += self.N_ob_points[m]
+                    exterior_normal = self.find_normal_2D(self.ob_co_points[m][:-1], self.ob_co_points[m][1:])
+                    for i in range(idx1, idx2):
+                        not_self = np.zeros(N_total, dtype=bool)
+                        not_self[idx3:idx4] = 1
+                        not_self_local = np.ones(self.N_ob_points[m], dtype = bool)
+                        if idx1 == idx3:
+                            not_self_local[i-idx3] = 0 
+                            not_self[i] = 0
+                        A[i,not_self] = - self.intgreens_vectorized(self.ob_points[n][i-idx1], self.ob_co_points[m][:-1][not_self_local], self.ob_co_points[m][1:][not_self_local]) #integrate
+                        #A[i,not_self] = - self.greens(np.tile(p_all[i], (N_total-1,1)), p_all[not_self]) * seg_lengths[not_self] #pulse
+                        b[i] += np.sum(- u_Q[not_self]*self.intDgreens_vectorized(self.ob_points[n][i-idx1], self.ob_co_points[m][:-1][not_self_local], self.ob_co_points[m][1:][not_self_local]))
+                        for k in range(idx3, idx4): 
+                            is_self = True if i == k else False
+                            g_scatter, dg_gradient = self.Gfield(self.ob_points[n][i-idx1], self.ob_points[m][k-idx3])
+                            A[i,k] += - g_scatter * get_segment_length(self.ob_co_points[m][k-idx3], self.ob_co_points[m][k-idx3+1])
+                            dg_scatter = np.dot(dg_gradient, exterior_normal[k-idx3])
+                            b[i] += - u_Q[k]*dg_scatter * get_segment_length(self.ob_co_points[m][k-idx3], self.ob_co_points[m][k-idx3+1]) 
+                            if is_self: 
+                                b[i] +=  u_Q[i]*c_Q[i]  
+   
         else:
-            #ipdb.set_trace()
+            '''explicitly include the boundary, just one obstacle'''
             # Set up boundary conditions for collocation
-            N_total = self.N_points + self.N_bound_points 
-            c_Q = np.full(N_total,1/2)   # 1/2 for environment
-            u_Q = np.ones(N_total)       #obstacles boundary set to 1
-            u_Q[0:self.N_bound_points] = 0 
-            p_all =  np.vstack((self.bound_points, self.points))
-            
+            N_total = self.N_ob_points[0] + self.N_points
+            c_Q = np.full(N_total,1/2)
+            u_Q = np.ones(N_total)     
+            u_Q[0:self.N_points] = 0 
+            p_all = np.vstack((self.points, self.ob_points[0]))
             # Set up matrix A (unknowns)   
             A = np.zeros((N_total,N_total))
             for i in range(N_total):
-                for k in range(self.N_bound_points): 
+                for k in range(self.N_points): 
                     is_self = True if i == k else False
-                    A[i,k] = self.intgreens(p_all[i], self.bound_co_points[k], self.bound_co_points[k+1], is_self)
-                for l in range(self.N_points):
-                    is_self = True if i == self.N_bound_points+l else False
-                    A[i,self.N_bound_points+l] = - self.intgreens(p_all[i], self.co_points[l], self.co_points[l+1], is_self)
-            
+                    A[i,k] = self.intgreens(p_all[i], self.co_points[k], self.co_points[k+1], is_self)
+                for l in range(self.N_ob_points):
+                    is_self = True if i == self.N_points+l else False
+                    A[i,self.N_points+l] = - self.intgreens(p_all[i], self.OB_co_points[0][l], self.ob_co_points[0][l+1], is_self)
             # Set up matrix b (knowns)
             b = np.zeros(N_total)
             for i in range(N_total):
-                for k in range(self.N_bound_points):
+                for k in range(self.N_points):
                     is_self = True if i == k else False
-                    b[i] +=  u_Q[k]*self.intDgreens(p_all[i], self.bound_co_points[k], self.bound_co_points[k+1], is_self)
+                    b[i] +=  u_Q[k]*self.intDgreens(p_all[i], self.co_points[k], self.co_points[k+1], is_self)
                     if is_self:
                         b[i] +=  u_Q[i]*c_Q[i]
-                for l in range(self.N_points):
-                    is_self = True if i == self.N_bound_points+l else False
-                    b[i] += - u_Q[l+self.N_bound_points]*self.intDgreens(p_all[i], self.co_points[l], self.co_points[l+1], is_self)
+                for l in range(self.N_ob_points):
+                    is_self = True if i == self.N_points+l else False
+                    b[i] += - u_Q[l+self.N_points]*self.intDgreens(p_all[i], self.ob_co_points[l], self.ob_co_points[l+1], is_self)
                     if is_self:
                         b[i] += u_Q[i]*c_Q[i]
         
-        # Solve matrix equation for gam on environment and obstacle
+        # Solve matrix equation
         gam_Q = la.solve(A,b) 
     
     self.u_on_bounds, self.gam_on_bounds = u_Q, gam_Q
-    self.plot_sample_points_inside()   #debugging
+    #self.plot_sample_points_inside()   #debugging
     #self.plot_normals()
     #self.plot_potential_on_boundaries(p_all)
     
     return
 
 
-  def calculate_greens_densities(self):
+  def calculate_greens_densities(self, grid_resolution = 1):
     '''Use IEM to calculate the new greens field anywhere, due to a grid of excitations.
        Only for base domain objects.
-       ONLY to be used with base domain objects
-       
+       ONLY to be used with base domain objects   
     '''
     #maxx, maxy = np.amax(self.co_points, axis=0)
     #minx, miny = np.amin(self.co_points, axis=0)
@@ -496,6 +513,7 @@ class IEM_anyshape:
     xx, yy = np.meshgrid(np.arange(0, 20+1, 1.0), np.arange(0, 20+1, 1.0))
     excitations = np.vstack([xx.ravel(), yy.ravel()]).T
     valid_coords = is_inside_polygon2(self.points, excitations, r = -1)
+    #ipdb.set_trace()
     excitations[~valid_coords,:] = np.nan
     g_on_bounds = []; dg_on_bounds= [];
     
@@ -571,6 +589,7 @@ class IEM_anyshape:
    
 
   def Ufield(self, point):
+    ''' Reconstruct the potential from the IEM formulation at a point '''
     potential = 0
     if self.other == True:
         u = self.u_on_bounds
@@ -581,20 +600,37 @@ class IEM_anyshape:
         ob = self.co_points
         ob_p = self.points
         if self.use_Greens == True:
-            #G, DG_grad = G_scattered_at_point(point, self.points, c_env, r_env)
-            exterior_normal = self.find_normal_2D(ob[:-1], ob[1:])
-            for l in range(N_ob):
-                G_scatter, DG_grad_scatter = self.Gfield(point, self.points[l])
-                DG_scatter = np.dot(DG_grad_scatter, exterior_normal[l])
-                potential += - gam[l] * G_scatter*get_segment_length(ob[l], ob[l+1]) + u[l]*DG_scatter*get_segment_length(ob[l], ob[l+1]) 
-            potential += np.sum(- gam * self.intgreens_vectorized(point, ob[:-1], ob[1:]) - u * self.intDgreens_vectorized(point, ob[:-1], ob[1:]))
-                #potential += -(gam[l] * (G_scatter*get_arc_length(t_ob[l], t_ob[l+1], c_ob, r_ob) + self.intgreens_estimate(point, ob[l], ob[l+1])) - u[l]*( DG_scatter*get_arc_length(t_ob[l], t_ob[l+1], c_ob, r_ob) + self.intDgreens(point, t_ob[l], t_ob[l+1], c_ob, r_ob, ob[l], ob[l+1])))
-                #potential += -(gam[l] * (G_scatter*get_arc_length(t_ob[l], t_ob[l+1], c_ob, r_ob) + self.greens(point, ob_p[l])*get_segment_length(ob[l], ob[l+1])) - u[l]*( DG_scatter*get_arc_length(t_ob[l], t_ob[l+1], c_ob, r_ob) + self.intDgreens(point, t_ob[l], t_ob[l+1], c_ob, r_ob, ob[l], ob[l+1])))
+            if self.ob_points:
+                # Case: all obstacles in one obstacle domain
+                N_obstacles = len(self.ob_points)
+                N_ob = sum(self.N_ob_points)
+                ob = self.ob_co_points
+                nidx2 = 0
+                for n in range(N_obstacles):
+                    nidx1 = nidx2
+                    nidx2 += self.N_ob_points[n]
+                    exterior_normal = self.find_normal_2D(ob[n][:-1], ob[n][1:])
+                    for l in range(self.N_ob_points[n]):
+                        G_scatter, DG_grad_scatter = self.Gfield(point, self.ob_points[n][l])
+                        DG_scatter = np.dot(DG_grad_scatter, exterior_normal[l])
+                        potential += - gam[nidx1+l] * G_scatter*get_segment_length(ob[n][l], ob[n][l+1]) + u[nidx1+l]*DG_scatter*get_segment_length(ob[n][l], ob[n][l+1]) 
+                    potential += np.sum(- gam[nidx1 : nidx2] * self.intgreens_vectorized(point, ob[n][:-1], ob[n][1:]) - u[nidx1 : nidx2] * self.intDgreens_vectorized(point, ob[n][:-1], ob[n][1:]))
+            else:      
+                #G, DG_grad = G_scattered_at_point(point, self.points, c_env, r_env)
+                exterior_normal = self.find_normal_2D(ob[:-1], ob[1:])
+                for l in range(N_ob):
+                    G_scatter, DG_grad_scatter = self.Gfield(point, self.points[l])
+                    DG_scatter = np.dot(DG_grad_scatter, exterior_normal[l])
+                    potential += - gam[l] * G_scatter*get_segment_length(ob[l], ob[l+1]) + u[l]*DG_scatter*get_segment_length(ob[l], ob[l+1]) 
+                potential += np.sum(- gam * self.intgreens_vectorized(point, ob[:-1], ob[1:]) - u * self.intDgreens_vectorized(point, ob[:-1], ob[1:]))
+                    #potential += -(gam[l] * (G_scatter*get_arc_length(t_ob[l], t_ob[l+1], c_ob, r_ob) + self.intgreens_estimate(point, ob[l], ob[l+1])) - u[l]*( DG_scatter*get_arc_length(t_ob[l], t_ob[l+1], c_ob, r_ob) + self.intDgreens(point, t_ob[l], t_ob[l+1], c_ob, r_ob, ob[l], ob[l+1])))
+                    #potential += -(gam[l] * (G_scatter*get_arc_length(t_ob[l], t_ob[l+1], c_ob, r_ob) + self.greens(point, ob_p[l])*get_segment_length(ob[l], ob[l+1])) - u[l]*( DG_scatter*get_arc_length(t_ob[l], t_ob[l+1], c_ob, r_ob) + self.intDgreens(point, t_ob[l], t_ob[l+1], c_ob, r_ob, ob[l], ob[l+1])))
         else:
             for k in range(N_env):
                 potential += (gam[k]*self.intgreens(point, env[k], env[k+1]) - u[k]*self.intDgreens(point, env[k], env[k+1]))
             for l in range(N_ob):
                 potential += -(gam[N_env+l]*self.intgreens(point, ob[l], ob[l+1]) - u[N_env+l]*self.intDgreens(point, ob[l], ob[l+1]))
+        potential = potential[0]
     else:
         u = self.u_on_bounds
         gam = self.gam_on_bounds
@@ -690,7 +726,7 @@ class IEM_anyshape:
         normals2 = np.zeros((self.N_ob_points,2))
         for o in range(len(self.ob_center)):
             for i in range(self.N_ob_points):
-                normals2[i] = self.find_normal(self.ob_co_points[o][i], self.ob_co_points[o][i+1])
+                normals2[i] = self.find_normal_2D(self.ob_co_points[o][i], self.ob_co_points[o][i+1])
             ax.quiver(self.ob_points[o][:,0],self.ob_points[o][:,1], normals2[:,0], normals2[:,1], color ='g')
     ax.quiver(self.points[:,0],self.points[:,1], normals1[:,0], normals1[:,1], color ='r') #U and V are the x and y components of the normal vectors
     
@@ -704,9 +740,15 @@ class IEM_anyshape:
           boundaryPoints = self.bound_points
           is_inside_outer = is_inside_polygon2(self.bound_points, grid, r=-0.5)
           xy = grid[is_inside_outer]
-          is_inside_inner = is_inside_polygon2(self.points, xy, r=0.5)
-          xy_inside.append(xy[is_inside_inner])
-          xy = xy[~is_inside_inner]
+          if self.ob_points:
+              for n in range(len(self.ob_points)):   
+                  is_inside_inner = is_inside_polygon2(self.ob_points[n], xy, r=0.5)
+                  xy_inside.append(xy[is_inside_inner])           
+                  xy = xy[~is_inside_inner]
+          else:
+              is_inside_inner = is_inside_polygon2(self.points, xy, r=0.5)
+              xy_inside.append(xy[is_inside_inner])
+              xy = xy[~is_inside_inner]
           for i in range(len(xy)):    
               phi.append(self.Ufield(xy[i]))
           xy_inside = np.vstack(xy_inside) 
@@ -918,7 +960,10 @@ def cart2pol(x, y):
     return(rho, phi)
 
 def get_segment_length(p1, p2):
-    return np.linalg.norm(p1 - p2)
+    if len(p1.shape) == 1:
+        p1 = p1.reshape((1,2))
+        p2 = p2.reshape((1,2))
+    return np.linalg.norm(p1 - p2, axis = 1)
 
 
 def bilinear_interpolation(x, y, points):
